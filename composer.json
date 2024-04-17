@@ -1,0 +1,17 @@
+{
+    "name": "edipoelwes/laravel-rabbitmq-worker",
+    "description": "This project is a Laravel package that facilitates the execution of RabbitMQ worker processes. It simplifies the configuration, management, and monitoring of worker processes, allowing you to easily integrate RabbitMQ into your Laravel application to handle asynchronous tasks efficiently and scalably.",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Edipoelwes\\LaravelRabbitmqWorker\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Edipo Elwes",
+            "email": "edipoelwes2@gmail.com"
+        }
+    ],
+    "require": {}
+}
