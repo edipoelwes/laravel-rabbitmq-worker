@@ -19,7 +19,7 @@ class RunCommand extends Command
             $processes = [];
 
             foreach ($workers as $worker) {
-                $process = new Process('php artisan worker:'.$worker);
+                $process = new Process(['php', 'artisan', $worker]);
                 $process->setTimeout(null);
                 $process->start();
 
