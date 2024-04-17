@@ -1,6 +1,12 @@
 {
     "name": "edipoelwes/laravel-rabbitmq-worker",
     "description": "This project is a Laravel package that facilitates the execution of RabbitMQ worker processes. It simplifies the configuration, management, and monitoring of worker processes, allowing you to easily integrate RabbitMQ into your Laravel application to handle asynchronous tasks efficiently and scalably.",
+    "keywords": [
+        "edipoelwes",
+        "laravel-rabbitmq-worker"
+    ],
+    "homepage": "https://github.com/edipoelwes/laravel-rabbitmq-worker",
+    "license": "MIT",
     "type": "library",
     "autoload": {
         "psr-4": {
@@ -13,5 +19,16 @@
             "email": "edipoelwes2@gmail.com"
         }
     ],
-    "require": {}
+    "require": {
+        "php": "^7.4|^8.0",
+        "illuminate/support": "^6.0|^7.0|^8.0",
+        "illuminate/console": "^6.0|^7.0|^8.0"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Edipoelwes\\LaravelRabbitmqWorker\\CommandServiceProvider"
+            ]
+        }
+    }
 }
