@@ -9,6 +9,9 @@
     "license": "MIT",
     "type": "library",
     "autoload": {
+        "files": [
+            "src/Services/RabbitMQ/RabbitMQService.php"
+        ],
         "psr-4": {
             "Edipoelwes\\LaravelRabbitmqWorker\\": "src/"
         }
