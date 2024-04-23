@@ -12,8 +12,12 @@ class RabbitMQService extends RabbitMQ
     }
     public function publish($message)
     {
-        $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
-        $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
+        try {
+            $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
+            $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
+        } catch (\Throwable $th) {
+            Log::error(__METHOD__.' '.__LINE__,  ['context' => $th->getMessage()]);
+        }
     }
 
     public function consume(callable $callback, int $timeout = null)
