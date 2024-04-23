@@ -14,6 +14,12 @@ composer require edipoelwes/laravel-rabbitmq-worker
 php artisan vendor:publish --provider="Edipoelwes\LaravelRabbitmqWorker\CommandServiceProvider"
 ```
 
+## Clear settings cache
+```
+php artisan config:cache
+```
+
+
 Then just configure according to your environment.
 
 ```php
@@ -23,7 +29,7 @@ Then just configure according to your environment.
 return [
     'connections' => [
         'host' => env('RABBITMQ_HOST', 'localhost'),
-        'port' => env('RABBITMQ_VHOST', 5672),
+        'port' => env('RABBITMQ_PORT', 5672),
         'user' => env('RABBITMQ_LOGIN', 'guest'),
         'password' => env('RABBITMQ_PASSWORD', 'guest'),
         'vhost' => env('RABBITMQ_VHOST', '/'),
