@@ -7,11 +7,13 @@ use PhpAmqpLib\Message\AMQPMessage;
 
 class RabbitMQService extends RabbitMQ
 {
-    public function __construct($queue, $routingKey, $exchange = '', $exchangeType = '') {
-        parent::__construct($queue, $routingKey, $exchange, $exchangeType);
+    public function __construct($queue, $routingKey, $exchange = '', $exchangeType = '', $consumerTag = null, $passive = false, $durable = true, $exclusive = false, $autoDelete = false) {
+        parent::__construct($queue, $routingKey, $exchange, $exchangeType, $consumerTag, $passive, $durable, $exclusive, $autoDelete);
     }
     public function publish($message)
     {
+        $this->queue_declare();
+
         try {
             $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
             $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
@@ -20,10 +22,47 @@ class RabbitMQService extends RabbitMQ
         }
     }
 
+    public function publishRpc($message)
+    {
+        list($queue_name) = $this->queue_declare_rpc();
+
+        $this->channel->basic_consume(
+            $queue_name,
+            '',
+            false,
+            true,
+            false,
+            false,
+            array(
+                $this,
+                'onResponse'
+            )
+        );
+
+        $msg = new AMQPMessage(
+            $message,
+            array(
+                'delivery_mode' => AMQPMessage::DELIVERY_MODE_NON_PERSISTENT,
+                'content_type' => 'application/json',
+                'reply_to' => $queue_name,
+                'correlation_id' => $this->correlation_id
+            )
+        );
+
+        $this->channel->basic_publish($msg, '', $this->queue);
+
+        while (!$this->response) {
+            $this->channel->wait();
+        }
+
+        return $this->response;
+    }
+
     public function consume(callable $callback, int $timeout = null)
     {
+        $this->queue_declare();
         $this->channel->basic_qos(null, 1, false);
-        $this->channel->basic_consume($this->queue, '', false, false, false, false, $callback);
+        $this->channel->basic_consume($this->queue, $this->consumerTag, false, false, false, false, $callback);
 
         try {
             if($timeout) {
