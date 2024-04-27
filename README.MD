@@ -66,7 +66,7 @@ $rabbitMQService = new RabbitMQService(
 $payload = "your message";
 
 $rabbitMQService->publish($payload);
-$rabbitMQService->destruct();
+$rabbitMQService->destruct(); // Clean up resources
 ```
 
 ### Creating a consumer
@@ -97,6 +97,7 @@ $callback = function ($msg) {
 }
 
 $rabbitMQService->consume($callback);
+$rabbitMQService->destruct(); // Clean up resources
 
 ```
 ### Creating a consumer into laravel command
@@ -162,6 +163,7 @@ class Consume extends Command
         }
         
         $rabbitMQService->consume($callback);
+        $rabbitMQService->destruct(); // Clean up resources
     }
 }
 
