@@ -10,7 +10,7 @@ class RabbitMQService extends RabbitMQ
     public function __construct($queue, $routingKey, $exchange = '', $exchangeType = '', $consumerTag = null, $passive = false, $durable = true, $exclusive = false, $autoDelete = false) {
         parent::__construct($queue, $routingKey, $exchange, $exchangeType, $consumerTag, $passive, $durable, $exclusive, $autoDelete);
     }
-    public function publish($message)
+    public function publish(string $message)
     {
         $this->queue_declare();
 
@@ -22,7 +22,7 @@ class RabbitMQService extends RabbitMQ
         }
     }
 
-    public function publishRpc($message)
+    public function publishRpc(string $message)
     {
         list($queue_name) = $this->queue_declare_rpc();
 
