@@ -1,5 +1,5 @@
 # laravel-rabbitmq-worker
-## Library to facilitate the use of rabbitmq within php based on the php-amqplib library.
+## Library to facilitate the use of rabbitmq within php based on the [php-amqplib](https://github.com/php-amqplib/php-amqplib) library.
 
 ##
 # Installing
