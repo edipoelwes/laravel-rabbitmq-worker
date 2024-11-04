@@ -100,6 +100,42 @@ $rabbitMQService->consume($callback);
 $rabbitMQService->destruct(); // Clean up resources
 
 ```
+
+### Creating a Consumer Using QueueConsumerAbstract
+
+#### You can create a consumer by extending the `QueueConsumerAbstract` class. This approach allows you to handle messages in a structured way. Below is an example of how to implement a command that consumes messages from a RabbitMQ queue:
+
+```php
+<?php
+
+namespace App\Console\Commands;
+
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\QueueConsumerAbstract;
+use Illuminate\Support\Facades\Log;
+
+class RabbitmqTesting extends QueueConsumerAbstract
+{
+    protected $signature = 'hello-command';
+
+    protected string $queueName = 'hello';
+
+    protected string $routeKey = 'hello';
+
+    protected string $consumerTag = 'rabbitmq-command-testing';
+
+    /**
+     * @throws \Exception
+     */
+    public function process($message): void
+    {
+        Log::info('start handling');
+        Log::info($message->body);
+        $message->ack();
+        Log::info('finish handling');
+    }
+}
+
+```
 ### Creating a consumer into laravel command
 ```php
 
