@@ -52,9 +52,6 @@ abstract class RabbitMQ
             config('laravel-rabbitmq-worker.connections.user'),
             config('laravel-rabbitmq-worker.connections.password'),
             config('laravel-rabbitmq-worker.connections.vhost'),
-            null,
-            AMQPStreamConnection
-
         );
 
         $this->channel = $this->connection->channel();
