@@ -20,6 +20,8 @@ abstract class RabbitMQ
     protected $autoDelete;
     protected $response = null;
     protected $correlation_id;
+    protected $nowait = false;
+    protected $arguments = ['x-queue-type' => ['S', 'quorum']];
 
     public function __construct(
         $queue,
@@ -49,7 +51,10 @@ abstract class RabbitMQ
             config('laravel-rabbitmq-worker.connections.port'),
             config('laravel-rabbitmq-worker.connections.user'),
             config('laravel-rabbitmq-worker.connections.password'),
-            config('laravel-rabbitmq-worker.connections.vhost')
+            config('laravel-rabbitmq-worker.connections.vhost'),
+            null,
+            AMQPStreamConnection
+
         );
 
         $this->channel = $this->connection->channel();
@@ -59,10 +64,10 @@ abstract class RabbitMQ
     {
         if(!empty($this->exchange)) {
             $this->channel->exchange_declare($this->exchange, $this->exchangeType, $this->passive, $this->durable , $this->autoDelete);
-            $this->channel->queue_declare($this->queue, $this->passive, $this->durable, $this->exclusive, $this->autoDelete);
+            $this->channel->queue_declare($this->queue, $this->passive, $this->durable, $this->exclusive, $this->autoDelete, $this->nowait, $this->arguments);
             $this->channel->queue_bind($this->queue, $this->exchange, $this->routingKey);
         } else {
-            $this->channel->queue_declare($this->queue, $this->passive, $this->durable, $this->exclusive, $this->autoDelete);
+            $this->channel->queue_declare($this->queue, $this->passive, $this->durable, $this->exclusive, $this->autoDelete, $this->nowait, $this->arguments);
         }
     }
 
