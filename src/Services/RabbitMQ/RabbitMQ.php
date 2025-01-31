@@ -51,7 +51,16 @@ abstract class RabbitMQ
             config('laravel-rabbitmq-worker.connections.port'),
             config('laravel-rabbitmq-worker.connections.user'),
             config('laravel-rabbitmq-worker.connections.password'),
-            config('laravel-rabbitmq-worker.connections.vhost'),
+            config('laravel-rabbitmq-worker.connections.insist'),
+            config('laravel-rabbitmq-worker.connections.login_method'),
+            config('laravel-rabbitmq-worker.connections.login_response'),
+            config('laravel-rabbitmq-worker.connections.locale'),
+            config('laravel-rabbitmq-worker.connections.connection_timeout'),
+            config('laravel-rabbitmq-worker.connections.read_write_timeout'),
+            config('laravel-rabbitmq-worker.connections.context'),
+            config('laravel-rabbitmq-worker.connections.heartbeat'),
+            config('laravel-rabbitmq-worker.connections.channel_rpc_timeout'),
+            config('laravel-rabbitmq-worker.connections.ssl_protocol'),
         );
 
         $this->channel = $this->connection->channel();
