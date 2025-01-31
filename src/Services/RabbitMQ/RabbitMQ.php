@@ -51,6 +51,7 @@ abstract class RabbitMQ
             config('laravel-rabbitmq-worker.connections.port'),
             config('laravel-rabbitmq-worker.connections.user'),
             config('laravel-rabbitmq-worker.connections.password'),
+            config('laravel-rabbitmq-worker.connections.vhost'),
             config('laravel-rabbitmq-worker.connections.insist'),
             config('laravel-rabbitmq-worker.connections.login_method'),
             config('laravel-rabbitmq-worker.connections.login_response'),
