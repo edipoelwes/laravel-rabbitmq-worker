@@ -59,6 +59,7 @@ abstract class RabbitMQ
             config('laravel-rabbitmq-worker.connections.connection_timeout'),
             config('laravel-rabbitmq-worker.connections.read_write_timeout'),
             config('laravel-rabbitmq-worker.connections.context'),
+            config('laravel-rabbitmq-worker.connections.keepalive'),
             config('laravel-rabbitmq-worker.connections.heartbeat'),
             config('laravel-rabbitmq-worker.connections.channel_rpc_timeout'),
             config('laravel-rabbitmq-worker.connections.ssl_protocol'),
