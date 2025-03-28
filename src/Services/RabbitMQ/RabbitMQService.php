@@ -10,6 +10,7 @@ class RabbitMQService extends RabbitMQ
     public function __construct($queue, $routingKey, $exchange = '', $exchangeType = '', $consumerTag = null, $passive = false, $durable = true, $exclusive = false, $autoDelete = false) {
         parent::__construct($queue, $routingKey, $exchange, $exchangeType, $consumerTag, $passive, $durable, $exclusive, $autoDelete);
     }
+
     public function publish(string $message)
     {
         $this->queue_declare();
@@ -19,6 +20,22 @@ class RabbitMQService extends RabbitMQ
             $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
         } catch (\Throwable $th) {
             Log::error(__METHOD__.' '.__LINE__,  ['context' => $th->getMessage()]);
+        }
+    }
+
+    public function publishBatch(array $messages)
+    {
+        $this->queue_declare();
+
+        try {
+            foreach ($messages as $message) {
+                $msg = new AMQPMessage(json_encode($message), array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
+                $this->channel->batch_basic_publish($msg, $this->exchange, $this->routingKey);
+            }
+
+            $this->channel->publish_batch();
+        } catch (\Throwable $th) {
+            Log::error(__METHOD__.' '.__LINE__, ['context' => $th->getMessage()]);
         }
     }
 
