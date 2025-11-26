@@ -4,10 +4,12 @@ namespace Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ;
 
 use Illuminate\Support\Facades\Log;
 use PhpAmqpLib\Message\AMQPMessage;
+use PhpAmqpLib\Exception\AMQPTimeoutException;
 
 class RabbitMQService extends RabbitMQ
 {
-    public function __construct($queue, $routingKey, $exchange = '', $exchangeType = '', $consumerTag = null, $passive = false, $durable = true, $exclusive = false, $autoDelete = false) {
+    public function __construct($queue, $routingKey, $exchange = '', $exchangeType = '', $consumerTag = null, $passive = false, $durable = true, $exclusive = false, $autoDelete = false)
+    {
         parent::__construct($queue, $routingKey, $exchange, $exchangeType, $consumerTag, $passive, $durable, $exclusive, $autoDelete);
     }
 
@@ -19,7 +21,7 @@ class RabbitMQService extends RabbitMQ
             $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
             $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
         } catch (\Throwable $th) {
-            Log::error(__METHOD__.' '.__LINE__,  ['context' => $th->getMessage()]);
+            Log::error(__METHOD__ . ' ' . __LINE__,  ['context' => $th->getMessage()]);
         }
     }
 
@@ -39,7 +41,7 @@ class RabbitMQService extends RabbitMQ
         }
     }
 
-    public function publishRpc(string $message)
+    public function publishRpc(string $message, int $timeout = 15)
     {
         list($queue_name) = $this->queue_declare_rpc();
 
@@ -68,8 +70,12 @@ class RabbitMQService extends RabbitMQ
 
         $this->channel->basic_publish($msg, '', $this->queue);
 
-        while (!$this->response) {
-            $this->channel->wait();
+        try {
+            while (!$this->response) {
+                $this->channel->wait(null, false, $timeout);
+            }
+        } catch (AMQPTimeoutException $e) {
+            $this->response = null;
         }
 
         return $this->response;
@@ -82,14 +88,14 @@ class RabbitMQService extends RabbitMQ
         $this->channel->basic_consume($this->queue, $this->consumerTag, false, false, false, false, $callback);
 
         try {
-            if($timeout) {
+            if ($timeout) {
                 while ($this->channel->is_consuming())
                     $this->channel->wait(null, false, $timeout);
             } else {
                 $this->channel->consume();
             }
         } catch (\Throwable $th) {
-            Log::warning(__METHOD__.' '.__LINE__,  ['context' => $th->getMessage()]);
+            Log::warning(__METHOD__ . ' ' . __LINE__,  ['context' => $th->getMessage()]);
         }
     }
 }
