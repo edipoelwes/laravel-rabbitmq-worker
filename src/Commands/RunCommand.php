@@ -23,14 +23,46 @@ class RunCommand extends Command
                 $process->setTimeout(null);
                 $process->start();
 
-                $processes[] = $process;
+                $processes[] = [
+                    'worker' => $worker,
+                    'process' => $process
+                ];
+
+                $this->info("Started worker: {$worker}");
             }
 
-            foreach ($processes as $process) {
-                $process->wait();
+            // Monitor all processes and output their logs
+            while (count($processes) > 0) {
+                foreach ($processes as $key => $item) {
+                    $process = $item['process'];
+                    $worker = $item['worker'];
+
+                    // Output stdout
+                    if ($output = $process->getIncrementalOutput()) {
+                        $this->line("[{$worker}] {$output}");
+                    }
+
+                    // Output stderr
+                    if ($errorOutput = $process->getIncrementalErrorOutput()) {
+                        $this->error("[{$worker}] {$errorOutput}");
+                    }
+
+                    // Remove finished processes
+                    if (!$process->isRunning()) {
+                        $exitCode = $process->getExitCode();
+                        $this->warn("Worker {$worker} stopped with exit code: {$exitCode}");
+                        unset($processes[$key]);
+                    }
+                }
+
+                // Small sleep to avoid high CPU usage
+                usleep(100000); // 100ms
             }
+
+            $this->warn('All workers have stopped');
         } catch (\Throwable $th) {
             Log::error(__METHOD__.' '.__LINE__, ['context' => $th->getMessage()]);
+            $this->error('Error: ' . $th->getMessage());
         }
     }
 }
