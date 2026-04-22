@@ -25,6 +25,8 @@ class QueueBuilder
 
     protected bool $shouldAutoDelete = false;
 
+    protected array $arguments = [];
+
     /**
      * @param string $queueName
      * @return QueueBuilder
@@ -115,6 +117,12 @@ class QueueBuilder
         return $this;
     }
 
+    public function setArguments(array $arguments): QueueBuilder
+    {
+        $this->arguments = array_merge($this->arguments, $arguments);
+        return $this;
+    }
+
     public function getQueue(): RabbitMQService
     {
         return new RabbitMQService(
@@ -126,7 +134,8 @@ class QueueBuilder
             $this->isPassive,
             $this->isDurable,
             $this->isExclusive,
-            $this->shouldAutoDelete
+            $this->shouldAutoDelete,
+            $this->arguments
         );
     }
 }

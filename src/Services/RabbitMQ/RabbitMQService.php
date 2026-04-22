@@ -8,9 +8,9 @@ use PhpAmqpLib\Exception\AMQPTimeoutException;
 
 class RabbitMQService extends RabbitMQ
 {
-    public function __construct($queue, $routingKey, $exchange = '', $exchangeType = '', $consumerTag = null, $passive = false, $durable = true, $exclusive = false, $autoDelete = false)
+    public function __construct($queue, $routingKey, $exchange = '', $exchangeType = '', $consumerTag = null, $passive = false, $durable = true, $exclusive = false, $autoDelete = false, array $arguments = [])
     {
-        parent::__construct($queue, $routingKey, $exchange, $exchangeType, $consumerTag, $passive, $durable, $exclusive, $autoDelete);
+        parent::__construct($queue, $routingKey, $exchange, $exchangeType, $consumerTag, $passive, $durable, $exclusive, $autoDelete, $arguments);
     }
 
     public function publish(string $message)
@@ -81,7 +81,7 @@ class RabbitMQService extends RabbitMQ
         return $this->response;
     }
 
-    public function consume(callable $callback, int $timeout = null)
+    public function consume(callable $callback, ?int $timeout = null)
     {
         $this->queue_declare();
         $this->channel->basic_qos(null, 1, false);
