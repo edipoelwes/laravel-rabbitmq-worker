@@ -44,8 +44,6 @@ return [
 ## Usage examples
 
 ### Creating a simple publisher
-> **Note:** `publish()` and `publishBatch()` use a passive queue declaration — they only verify that the queue exists without redeclaring it. This prevents `PRECONDITION_FAILED` errors when the consumer has already created the queue with custom arguments (e.g. TTL, dead-letter, delivery limit). The consumer is always responsible for creating the queue with the correct configuration.
-
 ```php
 
 <?php
@@ -219,8 +217,6 @@ class Consume extends Command
 You can pass custom RabbitMQ queue arguments to the consumer via the `$arguments` parameter in `RabbitMQService` or through `QueueBuilder::setArguments()`. This is useful for features like message TTL, dead-letter exchanges, delivery limits, and more.
 
 Each argument follows the AMQP type notation: `'argument-name' => ['type', value]`, where the type is `'S'` for string and `'I'` for integer.
-
-> **Important:** Arguments are only applied by the **consumer** when declaring the queue. The producer uses a passive declaration and never passes arguments to the broker, avoiding `PRECONDITION_FAILED` conflicts.
 
 > **`setArguments()` replaces** the arguments array entirely — what you pass is exactly what reaches the broker (merged with the base default `x-queue-type: quorum` in the constructor). To override the default, include `x-queue-type` in your own arguments.
 
