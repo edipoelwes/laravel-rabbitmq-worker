@@ -44,6 +44,8 @@ return [
 ## Usage examples
 
 ### Creating a simple publisher
+> **Note:** `publish()` and `publishBatch()` use a passive queue declaration — they only verify that the queue exists without redeclaring it. This prevents `PRECONDITION_FAILED` errors when the consumer has already created the queue with custom arguments (e.g. TTL, dead-letter, delivery limit). The consumer is always responsible for creating the queue with the correct configuration.
+
 ```php
 
 <?php
@@ -59,8 +61,7 @@ $rabbitMQService = new RabbitMQService(
     false,         // Passive
     true,          // Durable
     false,         // Exclusive
-    false,         // Auto delete
-    []             // Custom arguments (optional)
+    false          // Auto delete
 );
 
 // Prepare response payload
@@ -125,8 +126,8 @@ class RabbitmqTesting extends QueueConsumerAbstract
 
     protected string $consumerTag = 'rabbitmq-command-testing';
 
-    // Optional: override default arguments (defaults to quorum queue type)
-    // protected array $arguments = ['x-queue-type' => ['S', 'quorum']];
+    // Optional: override $arguments to set custom queue configuration (TTL, DLQ, delivery limit, etc.)
+    // See "Custom Queue Arguments" section for examples.
 
     /**
      * @throws \Exception
@@ -142,7 +143,7 @@ class RabbitmqTesting extends QueueConsumerAbstract
 
 ```
 
-> **Note:** `QueueConsumerAbstract` defaults to `['x-queue-type' => ['S', 'quorum']]` as the queue arguments. You can override the `$arguments` property in your subclass to pass any custom RabbitMQ queue arguments.
+
 ### Creating a consumer into laravel command
 ```php
 
@@ -215,33 +216,13 @@ class Consume extends Command
 
 ### Custom Queue Arguments
 
-You can pass custom RabbitMQ queue arguments via the `$arguments` parameter in `RabbitMQService` or through `QueueBuilder::setArguments()`. This is useful for features like message TTL, dead-letter exchanges, delivery limits, and more.
+You can pass custom RabbitMQ queue arguments to the consumer via the `$arguments` parameter in `RabbitMQService` or through `QueueBuilder::setArguments()`. This is useful for features like message TTL, dead-letter exchanges, delivery limits, and more.
 
 Each argument follows the AMQP type notation: `'argument-name' => ['type', value]`, where the type is `'S'` for string and `'I'` for integer.
 
-```php
-<?php
+> **Important:** Arguments are only applied by the **consumer** when declaring the queue. The producer uses a passive declaration and never passes arguments to the broker, avoiding `PRECONDITION_FAILED` conflicts.
 
-use Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ\RabbitMQService;
-
-$rabbitMQService = new RabbitMQService(
-    'queue',
-    'route-key',
-    '',
-    '',
-    '',
-    false,
-    true,
-    false,
-    false,
-    [
-        'x-message-ttl'             => ['I', 15000],                    // TTL in ms (integer)
-        'x-dead-letter-exchange'    => ['S', ''],                       // dead-letter exchange (string)
-        'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],    // DLQ routing key (string)
-        'x-delivery-limit'          => ['I', 3],                        // retry 3x, on 4th goes to DLQ
-    ]
-);
-```
+> **`setArguments()` replaces** the arguments array entirely — what you pass is exactly what reaches the broker (merged with the base default `x-queue-type: quorum` in the constructor). To override the default, include `x-queue-type` in your own arguments.
 
 Using `QueueConsumerAbstract`, override the `$arguments` property in your subclass:
 
@@ -275,6 +256,39 @@ class RabbitmqTesting extends QueueConsumerAbstract
         $message->ack();
     }
 }
+```
+
+Using `RabbitMQService` directly:
+
+```php
+<?php
+
+use Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ\RabbitMQService;
+
+$rabbitMQService = new RabbitMQService(
+    'queue',
+    'route-key',
+    '',
+    '',
+    '',
+    false,
+    true,
+    false,
+    false,
+    [
+        'x-message-ttl'             => ['I', 15000],                    // TTL in ms (integer)
+        'x-dead-letter-exchange'    => ['S', ''],                       // dead-letter exchange (string)
+        'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],    // DLQ routing key (string)
+        'x-delivery-limit'          => ['I', 3],                        // retry 3x, on 4th goes to DLQ
+    ]
+);
+
+$rabbitMQService->consume(function ($msg) {
+    // your code here
+    $msg->ack();
+});
+
+$rabbitMQService->destruct();
 ```
 
 Using `QueueBuilder`:

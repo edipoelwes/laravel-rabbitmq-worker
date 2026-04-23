@@ -119,7 +119,7 @@ class QueueBuilder
 
     public function setArguments(array $arguments): QueueBuilder
     {
-        $this->arguments = array_merge($this->arguments, $arguments);
+        $this->arguments = $arguments;
         return $this;
     }
 
