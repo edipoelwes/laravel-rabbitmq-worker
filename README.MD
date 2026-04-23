@@ -314,6 +314,32 @@ $queue->consume(function ($msg) {
 $queue->destruct();
 ```
 
+Using `QueueProducer`:
+
+```php
+<?php
+
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\QueueProducer;
+
+// Inject QueueProducer via constructor or resolve from container
+$queueProducer->produce('your-queue-name', $payload, [
+    'x-message-ttl'             => ['I', 15000],
+    'x-dead-letter-exchange'    => ['S', ''],
+    'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],
+    'x-delivery-limit'          => ['I', 3],
+]);
+
+// Batch publish
+$queueProducer->produceBatch('your-queue-name', $messages, [
+    'x-message-ttl'             => ['I', 15000],
+    'x-dead-letter-exchange'    => ['S', ''],
+    'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],
+    'x-delivery-limit'          => ['I', 3],
+]);
+```
+
+> **Note:** The `$arguments` parameter in `QueueProducer` is optional. When provided, they must match the arguments used by the consumer to avoid `PRECONDITION_FAILED` errors.
+
 # Remote procedure call (RPC)
 ## Configuration for RPC
 For publishing and consuming with RPC, please ensure that the RabbitMQ class is configured with 'durable = false' and 'auto_delete = true' settings.
