@@ -2,8 +2,11 @@
 
 namespace Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ;
 
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
+use RuntimeException;
+use Throwable;
 
 abstract class RabbitMQ
 {
@@ -22,6 +25,7 @@ abstract class RabbitMQ
     protected $correlation_id;
     protected $nowait = false;
     protected $arguments = ['x-queue-type' => ['S', 'quorum']];
+    protected array $connectedHost = [];
 
     public function __construct(
         $queue,
@@ -40,40 +44,22 @@ abstract class RabbitMQ
         $this->exchange = $exchange;
         $this->routingKey = $routingKey;
         $this->exchangeType = $exchangeType;
-        $this->consumerTag = is_null($consumerTag) ? '' : 'amq.tag.'.$consumerTag;
+        $this->consumerTag = is_null($consumerTag) ? '' : 'amq.tag.' . $consumerTag;
         $this->passive = $passive;
         $this->exclusive = $exclusive;
         $this->durable = $durable;
         $this->autoDelete = $autoDelete;
         $this->arguments = array_merge($this->arguments, $arguments);
-        $this->correlation_id = Str::uuid();;
+        $this->correlation_id = Str::uuid();
 
-        $this->connection = new AMQPStreamConnection(
-            config('laravel-rabbitmq-worker.connections.host'),
-            config('laravel-rabbitmq-worker.connections.port'),
-            config('laravel-rabbitmq-worker.connections.user'),
-            config('laravel-rabbitmq-worker.connections.password'),
-            config('laravel-rabbitmq-worker.connections.vhost'),
-            config('laravel-rabbitmq-worker.connections.insist'),
-            config('laravel-rabbitmq-worker.connections.login_method'),
-            config('laravel-rabbitmq-worker.connections.login_response'),
-            config('laravel-rabbitmq-worker.connections.locale'),
-            config('laravel-rabbitmq-worker.connections.connection_timeout'),
-            config('laravel-rabbitmq-worker.connections.read_write_timeout'),
-            config('laravel-rabbitmq-worker.connections.context'),
-            config('laravel-rabbitmq-worker.connections.keepalive'),
-            config('laravel-rabbitmq-worker.connections.heartbeat'),
-            config('laravel-rabbitmq-worker.connections.channel_rpc_timeout'),
-            config('laravel-rabbitmq-worker.connections.ssl_protocol'),
-        );
-
+        $this->connectToCluster();
         $this->channel = $this->connection->channel();
     }
 
     public function queue_declare()
     {
-        if(!empty($this->exchange)) {
-            $this->channel->exchange_declare($this->exchange, $this->exchangeType, $this->passive, $this->durable , $this->autoDelete);
+        if (!empty($this->exchange)) {
+            $this->channel->exchange_declare($this->exchange, $this->exchangeType, $this->passive, $this->durable, $this->autoDelete);
             $this->channel->queue_declare($this->queue, $this->passive, $this->durable, $this->exclusive, $this->autoDelete, $this->nowait, $this->arguments);
             $this->channel->queue_bind($this->queue, $this->exchange, $this->routingKey);
         } else {
@@ -83,7 +69,7 @@ abstract class RabbitMQ
 
     public function queue_declare_rpc(): array
     {
-        return $this->channel->queue_declare("", $this->passive, $this->durable, $this->exclusive, $this->autoDelete);
+        return $this->channel->queue_declare('', $this->passive, $this->durable, $this->exclusive, $this->autoDelete);
     }
 
     public function onResponse($response)
@@ -97,5 +83,65 @@ abstract class RabbitMQ
     {
         $this->channel->close();
         $this->connection->close();
+    }
+
+    protected function connectToCluster(): void
+    {
+        $connectionConfig = (array) config('laravel-rabbitmq-worker.connections', []);
+        $clusterConfig = (array) config('laravel-rabbitmq-worker.cluster', []);
+        $selector = new ClusterHostSelector($connectionConfig, $clusterConfig);
+
+        $latestException = null;
+        $errors = [];
+
+        foreach ($selector->orderedHosts() as $hostDefinition) {
+            try {
+                $this->connection = new AMQPStreamConnection(
+                    $hostDefinition['host'],
+                    $hostDefinition['port'],
+                    $hostDefinition['user'],
+                    $hostDefinition['password'],
+                    $hostDefinition['vhost'],
+                    $hostDefinition['insist'],
+                    $hostDefinition['login_method'],
+                    $hostDefinition['login_response'],
+                    $hostDefinition['locale'],
+                    $hostDefinition['connection_timeout'],
+                    $hostDefinition['read_write_timeout'],
+                    $hostDefinition['context'],
+                    $hostDefinition['keepalive'],
+                    $hostDefinition['heartbeat'],
+                    $hostDefinition['channel_rpc_timeout'],
+                    $hostDefinition['ssl_protocol']
+                );
+
+                $this->connectedHost = $hostDefinition;
+                $selector->rememberSuccessfulHost($hostDefinition);
+
+                Log::info('[LaravelRabbitmqWorker] Connected to RabbitMQ host.', [
+                    'host' => $hostDefinition['host'],
+                    'port' => $hostDefinition['port'],
+                    'queue' => $this->queue,
+                ]);
+
+                return;
+            } catch (Throwable $exception) {
+                $latestException = $exception;
+                $errors[] = sprintf('%s:%s (%s)', $hostDefinition['host'], $hostDefinition['port'], $exception->getMessage());
+
+                Log::warning('[LaravelRabbitmqWorker] Failed to connect to RabbitMQ host.', [
+                    'host' => $hostDefinition['host'],
+                    'port' => $hostDefinition['port'],
+                    'queue' => $this->queue,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        throw new RuntimeException(
+            'RabbitMQ cluster connection failed for all configured hosts. Attempts: ' . implode(' | ', $errors),
+            0,
+            $latestException
+        );
     }
 }

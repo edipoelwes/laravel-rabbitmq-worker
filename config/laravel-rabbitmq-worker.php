@@ -1,8 +1,16 @@
 <?php
 
+$rabbitMqHosts = array_values(array_filter(array_map(
+    'trim',
+    explode(',', (string) env('RABBITMQ_HOSTS', env('RABBITMQ_HOST', 'localhost')))
+)));
+
 return [
     'connections' => [
-        'host' => env('RABBITMQ_HOST', 'localhost'),
+        'host' => $rabbitMqHosts[0] ?? env('RABBITMQ_HOST', 'localhost'),
+        'hosts' => array_map(static function (string $host): array {
+            return ['host' => $host];
+        }, $rabbitMqHosts),
         'port' => env('RABBITMQ_PORT', 5672),
         'user' => env('RABBITMQ_LOGIN', 'guest'),
         'password' => env('RABBITMQ_PASSWORD', 'guest'),
@@ -18,5 +26,9 @@ return [
         'heartbeat' => (int) env('RABBITMQ_HEARTBEAT', 30),
         'channel_rpc_timeout' => (float) env('RABBITMQ_CHANNEL_RPC_TIMEOUUT', 0.0),
         'ssl_protocol' => env('RABBITMQ_SSL_PROTOCOL', null),
-    ]
+    ],
+    'cluster' => [
+        'last_host_cache_key' => env('RABBITMQ_LAST_HOST_CACHE_KEY', 'rabbitmq:cluster:last-success-host'),
+        'last_index_cache_key' => env('RABBITMQ_LAST_INDEX_CACHE_KEY', 'rabbitmq:cluster:last-success-index'),
+    ],
 ];

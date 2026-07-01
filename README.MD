@@ -26,8 +26,9 @@ php artisan config:cache
 
 Then just configure according to your environment.
 
-```php
+### Single host config
 
+```php
 <?php
 
 return [
@@ -40,6 +41,53 @@ return [
     ]
 ];
 ```
+
+### Cluster / multi-host config
+
+The library also supports multiple RabbitMQ nodes with automatic failover and round-robin ordering between new connections.
+
+Environment example:
+
+```dotenv
+RABBITMQ_HOST=10.10.1.10
+RABBITMQ_HOSTS=10.10.1.10,10.10.1.11,10.10.1.12
+RABBITMQ_PORT=5672
+RABBITMQ_VHOST=/
+RABBITMQ_LOGIN=guest
+RABBITMQ_PASSWORD=guest
+RABBITMQ_LAST_HOST_CACHE_KEY=rabbitmq:cluster:last-success-host
+RABBITMQ_LAST_INDEX_CACHE_KEY=rabbitmq:cluster:last-success-index
+```
+
+Config example inspired by the `hosts` format used in `vladimir-yuldashev/laravel-queue-rabbitmq`:
+
+```php
+<?php
+
+return [
+    'connections' => [
+        'host' => env('RABBITMQ_HOST', 'localhost'),
+        'hosts' => [
+            ['host' => '10.10.1.10'],
+            ['host' => '10.10.1.11'],
+            ['host' => '10.10.1.12'],
+        ],
+        'port' => env('RABBITMQ_PORT', 5672),
+        'user' => env('RABBITMQ_LOGIN', 'guest'),
+        'password' => env('RABBITMQ_PASSWORD', 'guest'),
+        'vhost' => env('RABBITMQ_VHOST', '/'),
+    ],
+    'cluster' => [
+        'last_host_cache_key' => env('RABBITMQ_LAST_HOST_CACHE_KEY', 'rabbitmq:cluster:last-success-host'),
+        'last_index_cache_key' => env('RABBITMQ_LAST_INDEX_CACHE_KEY', 'rabbitmq:cluster:last-success-index'),
+    ],
+];
+```
+
+Behavior summary:
+- New connections rotate to the next host after the last successful one.
+- If the first host in the current order is down, the library tries the remaining hosts automatically.
+- The last successful host is persisted in Laravel cache to improve distribution across the cluster.
 
 ## Usage examples
 
@@ -95,7 +143,7 @@ $callback = function ($msg) {
     // your code here
     
     $msg->ack();
-}
+};
 
 $rabbitMQService->consume($callback);
 $rabbitMQService->destruct(); // Clean up resources
@@ -203,7 +251,7 @@ class Consume extends Command
             // your code here
             
             $msg->ack();
-        }
+        };
         
         $rabbitMQService->consume($callback);
         $rabbitMQService->destruct(); // Clean up resources
