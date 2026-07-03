@@ -118,7 +118,7 @@ abstract class RabbitMQ
                 $this->connectedHost = $hostDefinition;
                 $selector->rememberSuccessfulHost($hostDefinition);
 
-                Log::info('[LaravelRabbitmqWorker] Connected to RabbitMQ host.', [
+                Log::debug('[LaravelRabbitmqWorker] Connected to RabbitMQ host.', [
                     'host' => $hostDefinition['host'],
                     'port' => $hostDefinition['port'],
                     'queue' => $this->queue,

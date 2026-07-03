@@ -26,30 +26,25 @@ php artisan config:cache
 
 Then just configure according to your environment.
 
+`RABBITMQ_HOSTS` is the single source of hosts. Use one host for single-node environments or a comma-separated list for clusters — there is no separate single-host variable.
+
 ### Single host config
 
-```php
-<?php
-
-return [
-    'connections' => [
-        'host' => env('RABBITMQ_HOST', 'localhost'),
-        'port' => env('RABBITMQ_PORT', 5672),
-        'user' => env('RABBITMQ_LOGIN', 'guest'),
-        'password' => env('RABBITMQ_PASSWORD', 'guest'),
-        'vhost' => env('RABBITMQ_VHOST', '/'),
-    ]
-];
+```dotenv
+RABBITMQ_HOSTS=rabbitmq
+RABBITMQ_PORT=5672
+RABBITMQ_VHOST=/
+RABBITMQ_LOGIN=guest
+RABBITMQ_PASSWORD=guest
 ```
 
 ### Cluster / multi-host config
 
-The library also supports multiple RabbitMQ nodes with automatic failover and round-robin ordering between new connections.
+The library supports multiple RabbitMQ nodes with automatic failover and round-robin ordering between new connections.
 
 Environment example:
 
 ```dotenv
-RABBITMQ_HOST=10.10.1.10
 RABBITMQ_HOSTS=10.10.1.10,10.10.1.11,10.10.1.12
 RABBITMQ_PORT=5672
 RABBITMQ_VHOST=/
@@ -66,7 +61,6 @@ Config example inspired by the `hosts` format used in `vladimir-yuldashev/larave
 
 return [
     'connections' => [
-        'host' => env('RABBITMQ_HOST', 'localhost'),
         'hosts' => [
             ['host' => '10.10.1.10'],
             ['host' => '10.10.1.11'],

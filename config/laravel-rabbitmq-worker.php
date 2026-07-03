@@ -1,13 +1,15 @@
 <?php
 
+// RABBITMQ_HOSTS é a única fonte de hosts: um item para ambiente single-node
+// (ex.: "rabbitmq") ou uma lista separada por vírgula para cluster.
 $rabbitMqHosts = array_values(array_filter(array_map(
     'trim',
-    explode(',', (string) env('RABBITMQ_HOSTS', env('RABBITMQ_HOST', 'localhost')))
+    explode(',', (string) env('RABBITMQ_HOSTS', 'localhost'))
 )));
 
 return [
     'connections' => [
-        'host' => $rabbitMqHosts[0] ?? env('RABBITMQ_HOST', 'localhost'),
+        'host' => $rabbitMqHosts[0] ?? 'localhost',
         'hosts' => array_map(static function (string $host): array {
             return ['host' => $host];
         }, $rabbitMqHosts),

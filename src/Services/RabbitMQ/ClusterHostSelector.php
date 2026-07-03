@@ -53,7 +53,7 @@ class ClusterHostSelector
         try {
             Cache::forever($this->lastHostCacheKey(), $this->hostKey($host));
             Cache::forever($this->lastIndexCacheKey(), $this->hostIndex($host));
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
             // Sem cache compartilhado a conexão continua funcional; só perde a memória de distribuição.
         }
     }
@@ -137,7 +137,7 @@ class ClusterHostSelector
         try {
             $value = Cache::get($this->lastHostCacheKey());
             return is_string($value) && $value !== '' ? $value : null;
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
             return null;
         }
     }
@@ -147,7 +147,7 @@ class ClusterHostSelector
         try {
             $value = Cache::get($this->lastIndexCacheKey());
             return is_numeric($value) ? (int) $value : null;
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
             return null;
         }
     }
