@@ -87,7 +87,9 @@ abstract class RabbitMQ
 
     public function connectedHost(): array
     {
-        return $this->connectedHost;
+        // Apenas chaves de identificação do nó; credenciais (password,
+        // login_response) nunca devem sair por um getter público.
+        return array_intersect_key($this->connectedHost, array_flip(['host', 'port', 'vhost', 'user']));
     }
 
     protected function connectToCluster(): void
