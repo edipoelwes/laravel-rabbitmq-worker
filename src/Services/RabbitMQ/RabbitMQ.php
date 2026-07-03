@@ -85,6 +85,11 @@ abstract class RabbitMQ
         $this->connection->close();
     }
 
+    public function connectedHost(): array
+    {
+        return $this->connectedHost;
+    }
+
     protected function connectToCluster(): void
     {
         $connectionConfig = (array) config('laravel-rabbitmq-worker.connections', []);
