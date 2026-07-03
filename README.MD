@@ -86,7 +86,8 @@ $rabbitMQService = new RabbitMQService(
     false,         // Passive
     true,          // Durable
     false,         // Exclusive
-    false          // Auto delete
+    false,         // Auto delete
+    []             // Custom arguments (optional)
 );
 
 $callback = function ($msg) {
@@ -123,6 +124,9 @@ class RabbitmqTesting extends QueueConsumerAbstract
 
     protected string $consumerTag = 'rabbitmq-command-testing';
 
+    // Optional: override $arguments to set custom queue configuration (TTL, DLQ, delivery limit, etc.)
+    // See "Custom Queue Arguments" section for examples.
+
     /**
      * @throws \Exception
      */
@@ -136,6 +140,8 @@ class RabbitmqTesting extends QueueConsumerAbstract
 }
 
 ```
+
+
 ### Creating a consumer into laravel command
 ```php
 
@@ -188,7 +194,8 @@ class Consume extends Command
             false,       // Passive
             true,        // Durable
             false,       // Exclusive
-            false        // Auto delete
+            false,       // Auto delete
+            []           // Custom arguments (optional)
         );
 
         $callback = function ($msg) {
@@ -204,6 +211,134 @@ class Consume extends Command
 }
 
 ```
+
+### Custom Queue Arguments
+
+You can pass custom RabbitMQ queue arguments to the consumer via the `$arguments` parameter in `RabbitMQService` or through `QueueBuilder::setArguments()`. This is useful for features like message TTL, dead-letter exchanges, delivery limits, and more.
+
+Each argument follows the AMQP type notation: `'argument-name' => ['type', value]`, where the type is `'S'` for string and `'I'` for integer.
+
+> **`setArguments()` replaces** the arguments array entirely — what you pass is exactly what reaches the broker (merged with the base default `x-queue-type: quorum` in the constructor). To override the default, include `x-queue-type` in your own arguments.
+
+Using `QueueConsumerAbstract`, override the `$arguments` property in your subclass:
+
+```php
+<?php
+
+namespace App\Console\Commands;
+
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\QueueConsumerAbstract;
+
+class RabbitmqTesting extends QueueConsumerAbstract
+{
+    protected $signature = 'hello-command';
+
+    protected string $queueName = 'hello';
+
+    protected string $routeKey = 'hello';
+
+    protected string $consumerTag = 'rabbitmq-command-testing';
+
+    protected array $arguments = [
+        'x-message-ttl'             => ['I', 15000],                    // TTL in ms (integer)
+        'x-dead-letter-exchange'    => ['S', ''],                       // dead-letter exchange (string)
+        'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],    // DLQ routing key (string)
+        'x-delivery-limit'          => ['I', 3],                        // retry 3x, on 4th goes to DLQ
+    ];
+
+    public function process($message): void
+    {
+        // your code here
+        $message->ack();
+    }
+}
+```
+
+Using `RabbitMQService` directly:
+
+```php
+<?php
+
+use Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ\RabbitMQService;
+
+$rabbitMQService = new RabbitMQService(
+    'queue',
+    'route-key',
+    '',
+    '',
+    '',
+    false,
+    true,
+    false,
+    false,
+    [
+        'x-message-ttl'             => ['I', 15000],                    // TTL in ms (integer)
+        'x-dead-letter-exchange'    => ['S', ''],                       // dead-letter exchange (string)
+        'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],    // DLQ routing key (string)
+        'x-delivery-limit'          => ['I', 3],                        // retry 3x, on 4th goes to DLQ
+    ]
+);
+
+$rabbitMQService->consume(function ($msg) {
+    // your code here
+    $msg->ack();
+});
+
+$rabbitMQService->destruct();
+```
+
+Using `QueueBuilder`:
+
+```php
+<?php
+
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\QueueBuilder;
+
+$queue = (new QueueBuilder())
+    ->setQueueName('queue')
+    ->setRouteKey('route-key')
+    ->setIsDurable(true)
+    ->setArguments([
+        'x-message-ttl'             => ['I', 15000],
+        'x-dead-letter-exchange'    => ['S', ''],
+        'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],
+        'x-delivery-limit'          => ['I', 3],
+    ])
+    ->getQueue();
+
+$queue->consume(function ($msg) {
+    // your code here
+    $msg->ack();
+});
+
+$queue->destruct();
+```
+
+Using `QueueProducer`:
+
+```php
+<?php
+
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\QueueProducer;
+
+// Inject QueueProducer via constructor or resolve from container
+$queueProducer->produce('your-queue-name', $payload, [
+    'x-message-ttl'             => ['I', 15000],
+    'x-dead-letter-exchange'    => ['S', ''],
+    'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],
+    'x-delivery-limit'          => ['I', 3],
+]);
+
+// Batch publish
+$queueProducer->produceBatch('your-queue-name', $messages, [
+    'x-message-ttl'             => ['I', 15000],
+    'x-dead-letter-exchange'    => ['S', ''],
+    'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],
+    'x-delivery-limit'          => ['I', 3],
+]);
+```
+
+> **Note:** The `$arguments` parameter in `QueueProducer` is optional. When provided, they must match the arguments used by the consumer to avoid `PRECONDITION_FAILED` errors.
 
 # Remote procedure call (RPC)
 ## Configuration for RPC

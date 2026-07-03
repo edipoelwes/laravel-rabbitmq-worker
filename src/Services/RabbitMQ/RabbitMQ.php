@@ -32,7 +32,8 @@ abstract class RabbitMQ
         $passive,
         $durable,
         $exclusive,
-        $autoDelete
+        $autoDelete,
+        array $arguments = []
     )
     {
         $this->queue = $queue;
@@ -44,6 +45,7 @@ abstract class RabbitMQ
         $this->exclusive = $exclusive;
         $this->durable = $durable;
         $this->autoDelete = $autoDelete;
+        $this->arguments = array_merge($this->arguments, $arguments);
         $this->correlation_id = Str::uuid();;
 
         $this->connection = new AMQPStreamConnection(

@@ -28,6 +28,8 @@ abstract class QueueConsumerAbstract extends Command
 
     protected bool $shouldAutoDelete = false;
 
+    protected array $arguments = ['x-queue-type' => ['S', 'quorum']];
+
     public abstract function process($message): void;
 
     /**
@@ -46,6 +48,7 @@ abstract class QueueConsumerAbstract extends Command
                 ->setIsDurable($this->isDurable)
                 ->setIsExclusive($this->isExclusive)
                 ->setShouldAutoDelete($this->shouldAutoDelete)
+                ->setArguments($this->arguments)
                 ->getQueue();
             $queueConnector->consume([$this, 'process']);
             $queueConnector->destruct();
