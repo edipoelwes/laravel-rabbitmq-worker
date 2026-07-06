@@ -104,6 +104,12 @@ class ClusterHostSelector
 
     private function rotatedHosts(array $hosts): array
     {
+        $count = count($hosts);
+
+        if ($count <= 1) {
+            return $hosts;
+        }
+
         $startIndex = 0;
         $lastHostKey = $this->cachedLastHostKey();
 
