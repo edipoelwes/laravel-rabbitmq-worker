@@ -134,6 +134,7 @@ abstract class RabbitMQ
                 return;
             } catch (Throwable $exception) {
                 $latestException = $exception;
+                $selector->rememberFailedHost($hostDefinition, $exception->getMessage());
                 $errors[] = sprintf('%s:%s (%s)', $hostDefinition['host'], $hostDefinition['port'], $exception->getMessage());
 
                 Log::warning('[LaravelRabbitmqWorker] Failed to connect to RabbitMQ host.', [

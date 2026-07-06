@@ -25,6 +25,85 @@ class ClusterHostSelector
             return $hosts;
         }
 
+        $orderedHosts = $this->rotatedHosts($hosts);
+        $healthyHosts = [];
+        $recoveringHosts = [];
+        $coolingHosts = [];
+
+        foreach ($orderedHosts as $host) {
+            $failureState = $this->failedHostState($host);
+
+            if ($failureState === null) {
+                $healthyHosts[] = $host;
+                continue;
+            }
+
+            if ($this->isCoolingDown($failureState)) {
+                $coolingHosts[] = $host;
+                continue;
+            }
+
+            $recoveringHosts[] = $host;
+        }
+
+        if ($healthyHosts === [] && $recoveringHosts === []) {
+            return $coolingHosts !== [] ? $coolingHosts : $orderedHosts;
+        }
+
+        if ($healthyHosts === []) {
+            return array_merge($recoveringHosts, $coolingHosts);
+        }
+
+        if ($recoveringHosts !== [] && $this->shouldProbeRecoveredHostFirst()) {
+            $probeHost = array_shift($recoveringHosts);
+
+            return array_merge([$probeHost], $healthyHosts, $recoveringHosts, $coolingHosts);
+        }
+
+        return array_merge($healthyHosts, $recoveringHosts, $coolingHosts);
+    }
+
+    public function rememberFailedHost(array $host, ?string $error = null): void
+    {
+        try {
+            $state = $this->failedHostState($host) ?? [];
+            $consecutiveFailures = ((int) ($state['consecutive_failures'] ?? 0)) + 1;
+            $cooldownSeconds = $this->cooldownSecondsForFailureCount($consecutiveFailures);
+            $now = time();
+
+            Cache::forever($this->failedHostCacheKey($host), [
+                'consecutive_failures' => $consecutiveFailures,
+                'retry_after_epoch' => $now + $cooldownSeconds,
+                'last_failed_at_epoch' => $now,
+                'last_error' => $error,
+            ]);
+        } catch (Throwable $exception) {
+            // Sem cache compartilhado a conexão continua funcional; só perde a memória de falha.
+        }
+    }
+
+    public function clearFailedHost(array $host): void
+    {
+        try {
+            Cache::forget($this->failedHostCacheKey($host));
+        } catch (Throwable $exception) {
+            // Sem cache compartilhado a conexão continua funcional; só perde a limpeza de memória de falha.
+        }
+    }
+
+    public function rememberSuccessfulHost(array $host): void
+    {
+        try {
+            Cache::forever($this->lastHostCacheKey(), $this->hostKey($host));
+            Cache::forever($this->lastIndexCacheKey(), $this->hostIndex($host));
+            $this->clearFailedHost($host);
+        } catch (Throwable $exception) {
+            // Sem cache compartilhado a conexão continua funcional; só perde a memória de distribuição.
+        }
+    }
+
+    private function rotatedHosts(array $hosts): array
+    {
         $startIndex = 0;
         $lastHostKey = $this->cachedLastHostKey();
 
@@ -46,16 +125,6 @@ class ClusterHostSelector
             array_slice($hosts, $startIndex),
             array_slice($hosts, 0, $startIndex)
         );
-    }
-
-    public function rememberSuccessfulHost(array $host): void
-    {
-        try {
-            Cache::forever($this->lastHostCacheKey(), $this->hostKey($host));
-            Cache::forever($this->lastIndexCacheKey(), $this->hostIndex($host));
-        } catch (Throwable $exception) {
-            // Sem cache compartilhado a conexão continua funcional; só perde a memória de distribuição.
-        }
     }
 
     private function normalizedHosts(): array
@@ -132,6 +201,22 @@ class ClusterHostSelector
         );
     }
 
+    private function failedHostState(array $host): ?array
+    {
+        try {
+            $value = Cache::get($this->failedHostCacheKey($host));
+
+            return is_array($value) ? $value : null;
+        } catch (Throwable $exception) {
+            return null;
+        }
+    }
+
+    private function failedHostCacheKey(array $host): string
+    {
+        return $this->failedHostCachePrefix() . $this->hostKey($host);
+    }
+
     private function cachedLastHostKey(): ?string
     {
         try {
@@ -160,5 +245,55 @@ class ClusterHostSelector
     private function lastIndexCacheKey(): string
     {
         return (string) ($this->clusterConfig['last_index_cache_key'] ?? 'rabbitmq:cluster:last-success-index');
+    }
+
+    private function failedHostCachePrefix(): string
+    {
+        return (string) ($this->clusterConfig['failed_host_cache_prefix'] ?? 'rabbitmq:cluster:failed-host:');
+    }
+
+    private function failedHostBaseCooldownSeconds(): int
+    {
+        return max(1, (int) ($this->clusterConfig['failed_host_base_cooldown_seconds'] ?? 30));
+    }
+
+    private function failedHostMaxCooldownSeconds(): int
+    {
+        return max($this->failedHostBaseCooldownSeconds(), (int) ($this->clusterConfig['failed_host_max_cooldown_seconds'] ?? 300));
+    }
+
+    private function failedHostProbeEvery(): int
+    {
+        return max(1, (int) ($this->clusterConfig['failed_host_probe_every'] ?? 10));
+    }
+
+    private function attemptCounterCacheKey(): string
+    {
+        return (string) ($this->clusterConfig['attempt_counter_cache_key'] ?? 'rabbitmq:cluster:connection-attempt-counter');
+    }
+
+    private function isCoolingDown(array $failureState): bool
+    {
+        return ((int) ($failureState['retry_after_epoch'] ?? 0)) > time();
+    }
+
+    private function cooldownSecondsForFailureCount(int $consecutiveFailures): int
+    {
+        $base = $this->failedHostBaseCooldownSeconds();
+        $max = $this->failedHostMaxCooldownSeconds();
+        $multiplier = max(0, $consecutiveFailures - 1);
+        $seconds = $base * (2 ** $multiplier);
+
+        return min($seconds, $max);
+    }
+
+    private function shouldProbeRecoveredHostFirst(): bool
+    {
+        try {
+            $attempt = Cache::increment($this->attemptCounterCacheKey());
+            return ((int) $attempt % $this->failedHostProbeEvery()) === 0;
+        } catch (Throwable $exception) {
+            return false;
+        }
     }
 }

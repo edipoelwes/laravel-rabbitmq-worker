@@ -52,6 +52,11 @@ RABBITMQ_LOGIN=guest
 RABBITMQ_PASSWORD=guest
 RABBITMQ_LAST_HOST_CACHE_KEY=rabbitmq:cluster:last-success-host
 RABBITMQ_LAST_INDEX_CACHE_KEY=rabbitmq:cluster:last-success-index
+RABBITMQ_FAILED_HOST_CACHE_PREFIX=rabbitmq:cluster:failed-host:
+RABBITMQ_FAILED_HOST_BASE_COOLDOWN_SECONDS=30
+RABBITMQ_FAILED_HOST_MAX_COOLDOWN_SECONDS=300
+RABBITMQ_FAILED_HOST_PROBE_EVERY=10
+RABBITMQ_ATTEMPT_COUNTER_CACHE_KEY=rabbitmq:cluster:connection-attempt-counter
 ```
 
 Config example inspired by the `hosts` format used in `vladimir-yuldashev/laravel-queue-rabbitmq`:
@@ -74,6 +79,11 @@ return [
     'cluster' => [
         'last_host_cache_key' => env('RABBITMQ_LAST_HOST_CACHE_KEY', 'rabbitmq:cluster:last-success-host'),
         'last_index_cache_key' => env('RABBITMQ_LAST_INDEX_CACHE_KEY', 'rabbitmq:cluster:last-success-index'),
+        'failed_host_cache_prefix' => env('RABBITMQ_FAILED_HOST_CACHE_PREFIX', 'rabbitmq:cluster:failed-host:'),
+        'failed_host_base_cooldown_seconds' => env('RABBITMQ_FAILED_HOST_BASE_COOLDOWN_SECONDS', 30),
+        'failed_host_max_cooldown_seconds' => env('RABBITMQ_FAILED_HOST_MAX_COOLDOWN_SECONDS', 300),
+        'failed_host_probe_every' => env('RABBITMQ_FAILED_HOST_PROBE_EVERY', 10),
+        'attempt_counter_cache_key' => env('RABBITMQ_ATTEMPT_COUNTER_CACHE_KEY', 'rabbitmq:cluster:connection-attempt-counter'),
     ],
 ];
 ```
@@ -82,6 +92,8 @@ Behavior summary:
 - New connections rotate to the next host after the last successful one.
 - If the first host in the current order is down, the library tries the remaining hosts automatically.
 - The last successful host is persisted in Laravel cache to improve distribution across the cluster.
+- Failed hosts enter cooldown with exponential backoff and stop being retried first on every new connection.
+- After cooldown, failed hosts are probed occasionally and rejoin the normal pool after the next successful connection.
 
 ## Usage examples
 

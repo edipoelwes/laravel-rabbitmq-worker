@@ -32,5 +32,10 @@ return [
     'cluster' => [
         'last_host_cache_key' => env('RABBITMQ_LAST_HOST_CACHE_KEY', 'rabbitmq:cluster:last-success-host'),
         'last_index_cache_key' => env('RABBITMQ_LAST_INDEX_CACHE_KEY', 'rabbitmq:cluster:last-success-index'),
+        'failed_host_cache_prefix' => env('RABBITMQ_FAILED_HOST_CACHE_PREFIX', 'rabbitmq:cluster:failed-host:'),
+        'failed_host_base_cooldown_seconds' => (int) env('RABBITMQ_FAILED_HOST_BASE_COOLDOWN_SECONDS', 30),
+        'failed_host_max_cooldown_seconds' => (int) env('RABBITMQ_FAILED_HOST_MAX_COOLDOWN_SECONDS', 300),
+        'failed_host_probe_every' => (int) env('RABBITMQ_FAILED_HOST_PROBE_EVERY', 10),
+        'attempt_counter_cache_key' => env('RABBITMQ_ATTEMPT_COUNTER_CACHE_KEY', 'rabbitmq:cluster:connection-attempt-counter'),
     ],
 ];
