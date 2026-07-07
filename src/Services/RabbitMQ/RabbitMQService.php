@@ -3,6 +3,9 @@
 namespace Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ;
 
 use Illuminate\Support\Facades\Log;
+use PhpAmqpLib\Exception\AMQPChannelClosedException;
+use PhpAmqpLib\Exception\AMQPConnectionClosedException;
+use PhpAmqpLib\Exception\AMQPRuntimeException;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Exception\AMQPTimeoutException;
 
@@ -20,8 +23,15 @@ class RabbitMQService extends RabbitMQ
         try {
             $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
             $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
+        } catch (AMQPConnectionClosedException|AMQPChannelClosedException $exception) {
+            $this->reconnect();
+            $this->queue_declare();
+
+            $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
+            $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
         } catch (\Throwable $th) {
             Log::error(__METHOD__ . ' ' . __LINE__,  ['context' => $th->getMessage()]);
+            throw $th;
         }
     }
 
@@ -36,8 +46,19 @@ class RabbitMQService extends RabbitMQ
             }
 
             $this->channel->publish_batch();
+        } catch (AMQPConnectionClosedException|AMQPChannelClosedException $exception) {
+            $this->reconnect();
+            $this->queue_declare();
+
+            foreach ($messages as $message) {
+                $msg = new AMQPMessage(json_encode($message), array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
+                $this->channel->batch_basic_publish($msg, $this->exchange, $this->routingKey);
+            }
+
+            $this->channel->publish_batch();
         } catch (\Throwable $th) {
             Log::error(__METHOD__.' '.__LINE__, ['context' => $th->getMessage()]);
+            throw $th;
         }
     }
 
@@ -83,19 +104,29 @@ class RabbitMQService extends RabbitMQ
 
     public function consume(callable $callback, ?int $timeout = null)
     {
-        $this->queue_declare();
-        $this->channel->basic_qos(null, 1, false);
-        $this->channel->basic_consume($this->queue, $this->consumerTag, false, false, false, false, $callback);
-
         try {
+            $this->queue_declare();
+            $this->channel->basic_qos(null, 1, false);
+            $this->channel->basic_consume($this->queue, $this->consumerTag, false, false, false, false, $callback);
+
             if ($timeout) {
-                while ($this->channel->is_consuming())
+                while ($this->channel->is_consuming()) {
                     $this->channel->wait(null, false, $timeout);
+                }
             } else {
                 $this->channel->consume();
             }
+        } catch (AMQPConnectionClosedException|AMQPChannelClosedException $exception) {
+            Log::warning(__METHOD__ . ' ' . __LINE__, ['context' => $exception->getMessage()]);
+
+            throw new AMQPRuntimeException(
+                'Lost connection: ' . $exception->getMessage(),
+                $exception->getCode(),
+                $exception
+            );
         } catch (\Throwable $th) {
             Log::warning(__METHOD__ . ' ' . __LINE__,  ['context' => $th->getMessage()]);
+            throw $th;
         }
     }
 }

@@ -5,6 +5,8 @@ namespace Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
+use PhpAmqpLib\Exception\AMQPChannelClosedException;
+use PhpAmqpLib\Exception\AMQPConnectionClosedException;
 use RuntimeException;
 use Throwable;
 
@@ -81,8 +83,13 @@ abstract class RabbitMQ
 
     public function destruct()
     {
-        $this->channel->close();
-        $this->connection->close();
+        if ($this->channel) {
+            $this->channel->close();
+        }
+
+        if ($this->connection) {
+            $this->connection->close();
+        }
     }
 
     public function connectedHost(): array
@@ -151,5 +158,51 @@ abstract class RabbitMQ
             0,
             $latestException
         );
+    }
+
+    /**
+     * Reconnects using the original configuration and recreates the main channel.
+     *
+     * @throws Throwable
+     */
+    protected function reconnect(): void
+    {
+        $this->closeResources();
+        $this->connectToCluster();
+        $this->channel = $this->connection->channel();
+    }
+
+    protected function createFreshChannel()
+    {
+        try {
+            return $this->connection->channel();
+        } catch (AMQPConnectionClosedException|AMQPChannelClosedException $exception) {
+            $this->reconnect();
+
+            return $this->connection->channel();
+        }
+    }
+
+    private function closeResources(): void
+    {
+        try {
+            if ($this->channel) {
+                $this->channel->close();
+            }
+        } catch (Throwable $exception) {
+            // Ignore cleanup failures during reconnect.
+        } finally {
+            $this->channel = null;
+        }
+
+        try {
+            if ($this->connection) {
+                $this->connection->close();
+            }
+        } catch (Throwable $exception) {
+            // Ignore cleanup failures during reconnect.
+        } finally {
+            $this->connection = null;
+        }
     }
 }
