@@ -1,19 +1,42 @@
 <?php
 
-// RABBITMQ_HOSTS é a única fonte de hosts: um item para ambiente single-node
-// (ex.: "rabbitmq") ou uma lista separada por vírgula para cluster.
-$rabbitMqHosts = array_values(array_filter(array_map(
+// RABBITMQ_MGMT_URLS é a fonte de nós do cluster. Cada URL fornece host e porta
+// (ex.: "http://rabbitmq-1:15672,http://rabbitmq-2:15672").
+// A env RABBITMQ_HOST permanece apenas para a infra legada.
+$rabbitMqManagementUrls = array_values(array_filter(array_map(
     'trim',
-    explode(',', (string) env('RABBITMQ_HOSTS', 'localhost'))
+    explode(',', (string) env('RABBITMQ_MGMT_URLS', ''))
 )));
+
+$rabbitMqNodes = array_values(array_filter(array_map(
+    static function (string $url): ?array {
+        $parts = parse_url($url);
+        $host = trim((string) ($parts['host'] ?? ''));
+
+        if ($host === '') {
+            return null;
+        }
+
+        return [
+            'host' => $host,
+            'port' => (int) ($parts['port'] ?? env('RABBITMQ_PORT', 5672)),
+        ];
+    },
+    $rabbitMqManagementUrls
+)));
+
+if ($rabbitMqNodes === []) {
+    $rabbitMqNodes = [[
+        'host' => 'localhost',
+        'port' => (int) env('RABBITMQ_PORT', 5672),
+    ]];
+}
 
 return [
     'connections' => [
-        'host' => $rabbitMqHosts[0] ?? 'localhost',
-        'hosts' => array_map(static function (string $host): array {
-            return ['host' => $host];
-        }, $rabbitMqHosts),
-        'port' => env('RABBITMQ_PORT', 5672),
+        'host' => $rabbitMqNodes[0]['host'],
+        'hosts' => $rabbitMqNodes,
+        'port' => $rabbitMqNodes[0]['port'],
         'user' => env('RABBITMQ_LOGIN', 'guest'),
         'password' => env('RABBITMQ_PASSWORD', 'guest'),
         'vhost' => env('RABBITMQ_VHOST', '/'),
@@ -25,9 +48,12 @@ return [
         'read_write_timeout' => (float) env('RABBITMQ_READ_WRITE_TIMEOUT', 3.0),
         'context' => env('RABBITMQ_CONTEXT', null),
         'keepalive' => env('RABBITMQ_KEEPALIVE', false),
-        'heartbeat' => (int) env('RABBITMQ_HEARTBEAT', 30),
+        'heartbeat' => (int) env('RABBITMQ_HEARTBEAT', 60),
         'channel_rpc_timeout' => (float) env('RABBITMQ_CHANNEL_RPC_TIMEOUUT', 0.0),
         'ssl_protocol' => env('RABBITMQ_SSL_PROTOCOL', null),
+    ],
+    'management' => [
+        'urls' => $rabbitMqManagementUrls,
     ],
     'cluster' => [
         'last_host_cache_key' => env('RABBITMQ_LAST_HOST_CACHE_KEY', 'rabbitmq:cluster:last-success-host'),
