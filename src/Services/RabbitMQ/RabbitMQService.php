@@ -18,9 +18,8 @@ class RabbitMQService extends RabbitMQ
 
     public function publish(string $message)
     {
-        $this->queue_declare();
-
         try {
+            $this->queue_declare();
             $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
             $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
         } catch (AMQPConnectionClosedException|AMQPChannelClosedException $exception) {
@@ -37,9 +36,8 @@ class RabbitMQService extends RabbitMQ
 
     public function publishBatch(array $messages)
     {
-        $this->queue_declare();
-
         try {
+            $this->queue_declare();
             foreach ($messages as $message) {
                 $msg = new AMQPMessage(json_encode($message), array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
                 $this->channel->batch_basic_publish($msg, $this->exchange, $this->routingKey);
