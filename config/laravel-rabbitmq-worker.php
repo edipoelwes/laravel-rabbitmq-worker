@@ -1,29 +1,24 @@
 <?php
 
-// RABBITMQ_MGMT_URLS é a fonte de nós do cluster. Cada URL fornece host e porta
-// (ex.: "http://rabbitmq-1:15672,http://rabbitmq-2:15672").
-// A env RABBITMQ_HOST permanece apenas para a infra legada.
+// RABBITMQ_HOSTS é a fonte dos nós AMQP usados pela aplicação. Aceita um item
+// para single-node ou uma lista separada por vírgula para cluster.
+// RABBITMQ_HOST permanece apenas como fallback legado / infra.
+$rabbitMqHosts = array_values(array_filter(array_map(
+    'trim',
+    explode(',', (string) env('RABBITMQ_HOSTS', (string) env('RABBITMQ_HOST', 'localhost')))
+)));
+
 $rabbitMqManagementUrls = array_values(array_filter(array_map(
     'trim',
     explode(',', (string) env('RABBITMQ_MGMT_URLS', ''))
 )));
 
-$rabbitMqNodes = array_values(array_filter(array_map(
-    static function (string $url): ?array {
-        $parts = parse_url($url);
-        $host = trim((string) ($parts['host'] ?? ''));
-
-        if ($host === '') {
-            return null;
-        }
-
-        return [
-            'host' => $host,
-            'port' => (int) ($parts['port'] ?? env('RABBITMQ_PORT', 5672)),
-        ];
-    },
-    $rabbitMqManagementUrls
-)));
+$rabbitMqNodes = array_map(static function (string $host): array {
+    return [
+        'host' => $host,
+        'port' => (int) env('RABBITMQ_PORT', 5672),
+    ];
+}, $rabbitMqHosts);
 
 if ($rabbitMqNodes === []) {
     $rabbitMqNodes = [[
