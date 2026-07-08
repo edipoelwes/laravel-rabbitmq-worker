@@ -47,6 +47,27 @@ return [
         ],
 
         /*
+         * DLQ por fila física de prioridade (não por message_type). Quando
+         * habilitada, a fila principal é declarada com x-dead-letter-exchange,
+         * x-dead-letter-routing-key e x-delivery-limit apontando para
+         * "<fila>.<suffix>", e a lib garante que essa fila exista antes do
+         * consumo. `priorities.<high|default|low>` permite sobrescrever
+         * enabled/suffix/delivery_limit/queue_type por prioridade; chaves
+         * ausentes caem para o valor global acima.
+         */
+        'dead_letter' => [
+            'enabled' => env('RABBITMQ_PRIORITY_DLQ_ENABLED', true),
+            'suffix' => env('RABBITMQ_PRIORITY_DLQ_SUFFIX', '.dlq'),
+            'delivery_limit' => (int) env('RABBITMQ_PRIORITY_DELIVERY_LIMIT', 3),
+            'queue_type' => env('RABBITMQ_PRIORITY_DLQ_QUEUE_TYPE', 'quorum'),
+            'priorities' => [
+                'high' => [],
+                'default' => [],
+                'low' => [],
+            ],
+        ],
+
+        /*
          * Mapa de roteamento da aplicação: message_type => [
          *     'priority' => 'high'|'default'|'low',
          *     'consumer' => classe com process($message) (PriorityConsumerInterface),

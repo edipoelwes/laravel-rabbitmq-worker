@@ -7,10 +7,14 @@ class QueueProducer
 
     private QueueBuilder $queueBuilder;
 
+    private PriorityQueueTopology $topology;
+
     public function __construct(
-        QueueBuilder $queueBuilder
+        QueueBuilder $queueBuilder,
+        PriorityQueueTopology $topology
     ) {
         $this->queueBuilder = $queueBuilder;
+        $this->topology = $topology;
     }
 
     public function produce(string $queueName, array $payload, array $arguments = []): void
@@ -49,15 +53,21 @@ class QueueProducer
      * o tipo funcional da mensagem via header `message_type` para o
      * PriorityMessageRouter delegar ao consumer correto.
      *
+     * Os argumentos AMQP da fila (DLQ/delivery-limit) são resolvidos
+     * automaticamente pela mesma topologia usada pelo consumer, para evitar
+     * PRECONDITION_FAILED por divergência de argumentos.
+     *
      * @param string|null $priority 'high'|'default'|'low'. Nulo cai em 'default'.
      */
     public function producePriority(?string $priority, string $messageType, array $payload, array $arguments = []): void
     {
+        $priority = $priority ?: 'default';
+
         $this->produceWithHeaders(
-            $this->resolvePriorityQueue($priority),
+            $this->topology->queueName($priority),
             $payload,
             ['message_type' => $messageType],
-            $arguments
+            $this->priorityArguments($priority, $arguments)
         );
     }
 
@@ -68,23 +78,18 @@ class QueueProducer
      */
     public function producePriorityBatch(?string $priority, string $messageType, array $payloads, array $arguments = []): void
     {
+        $priority = $priority ?: 'default';
+
         $this->produceBatchWithHeaders(
-            $this->resolvePriorityQueue($priority),
+            $this->topology->queueName($priority),
             $payloads,
             ['message_type' => $messageType],
-            $arguments
+            $this->priorityArguments($priority, $arguments)
         );
     }
 
-    private function resolvePriorityQueue(?string $priority): string
+    private function priorityArguments(string $priority, array $arguments): array
     {
-        $priority = $priority ?: 'default';
-        $queueName = config("laravel-rabbitmq-worker.priority.queues.{$priority}");
-
-        if (!$queueName) {
-            throw new \InvalidArgumentException("Prioridade RabbitMQ não mapeada: {$priority}");
-        }
-
-        return $queueName;
+        return array_merge($arguments, $this->topology->mainQueueDeadLetterArguments($priority));
     }
 }

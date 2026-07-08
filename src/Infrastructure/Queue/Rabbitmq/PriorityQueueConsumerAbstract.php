@@ -42,16 +42,21 @@ abstract class PriorityQueueConsumerAbstract extends QueueConsumerAbstract
 
     public function handle(): void
     {
-        $queueName = config("laravel-rabbitmq-worker.priority.queues.{$this->priority}");
+        $topology = app(PriorityQueueTopology::class);
 
-        if (!$queueName) {
-            $this->error("Prioridade RabbitMQ não mapeada em priority.queues: {$this->priority}");
+        try {
+            $queueName = $topology->queueName($this->priority);
+        } catch (\InvalidArgumentException $e) {
+            $this->error($e->getMessage());
             return;
         }
 
         $this->queueName = $queueName;
         $this->routeKey = $queueName;
         $this->consumerTag = $queueName;
+        $this->arguments = array_merge($this->arguments, $topology->mainQueueDeadLetterArguments($this->priority));
+
+        $topology->ensureDeadLetterQueue($this->priority, app(QueueBuilder::class));
 
         parent::handle();
     }
