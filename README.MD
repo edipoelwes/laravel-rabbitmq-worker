@@ -578,14 +578,37 @@ class MeuConsumer implements PriorityConsumerInterface
 
 ### 4. Publique com o header de roteamento
 
+Forma recomendada — a prioridade é inferida automaticamente de
+`priority.routes.<message_type>.priority`, então você não repete
+`'high'|'default'|'low'` no código da aplicação:
+
 ```php
 use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\QueueProducer;
 
-app(QueueProducer::class)->producePriority('default', 'meu_message_type', ['id' => 123]);
-app(QueueProducer::class)->producePriorityBatch('default', 'meu_message_type', $payloads);
+app(QueueProducer::class)->produceRouted('meu_message_type', ['id' => 123]);
+app(QueueProducer::class)->produceRoutedBatch('meu_message_type', $payloads);
+```
+
+`produceRouted()`/`produceRoutedBatch()` lançam `InvalidArgumentException` se
+`meu_message_type` não estiver mapeado em `priority.routes` (ou a rota não
+definir `priority`) — isso é intencional: preferimos falhar rápido a publicar
+silenciosamente em `default`.
+
+`producePriority()`/`producePriorityBatch()` continuam existindo e funcionando
+exatamente como antes — use-as quando precisar de um **override explícito** da
+prioridade (ex.: um job que decide a prioridade em tempo de execução, fora do
+que está mapeado em `priority.routes`):
+
+```php
+app(QueueProducer::class)->producePriority('low', 'meu_message_type', ['id' => 123]);
+app(QueueProducer::class)->producePriorityBatch('low', 'meu_message_type', $payloads);
 ```
 
 ### 5. Teste manual
+
+`rabbitmq:priority-publish` usa a mesma inferência por padrão. Passe
+`--priority` só quando quiser sobrescrever a rota (ou testar um `message_type`
+ainda não mapeado):
 
 ```bash
 php artisan rabbitmq:priority-publish meu_message_type --payload='{"id":123}'
@@ -608,9 +631,10 @@ modelo simples (3 filas + 3 DLQs) mesmo que o app tenha dezenas de rotas em
 Isso é resolvido de forma centralizada por `PriorityQueueTopology` e usado
 tanto por `PriorityQueueConsumerAbstract` (declara a fila principal com os
 argumentos de DLQ e garante que a `.dlq` exista) quanto por
-`QueueProducer::producePriority()`/`producePriorityBatch()` (aplicam os
+`QueueProducer::producePriority()`/`producePriorityBatch()` — e por extensão
+`produceRouted()`/`produceRoutedBatch()`, que delegam para elas — aplicando os
 mesmos argumentos ao publicar, evitando `PRECONDITION_FAILED` por divergência
-de argumentos entre quem publica e quem consome).
+de argumentos entre quem publica e quem consome.
 
 Com `dead_letter.enabled` (padrão `true`), a fila principal é declarada com:
 

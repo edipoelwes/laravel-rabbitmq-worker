@@ -88,6 +88,42 @@ class QueueProducer
         );
     }
 
+    /**
+     * Publica um payload único inferindo a prioridade a partir de
+     * config('laravel-rabbitmq-worker.priority.routes.<message_type>.priority'),
+     * eliminando a necessidade de repetir 'high'|'default'|'low' no app.
+     *
+     * @throws \InvalidArgumentException quando o message_type não está mapeado
+     *                                    em priority.routes (ou a rota não define
+     *                                    'priority').
+     */
+    public function produceRouted(string $messageType, array $payload, array $arguments = []): void
+    {
+        $this->producePriority(
+            $this->topology->priorityForMessageType($messageType, null),
+            $messageType,
+            $payload,
+            $arguments
+        );
+    }
+
+    /**
+     * Versão em lote de produceRouted().
+     *
+     * @throws \InvalidArgumentException quando o message_type não está mapeado
+     *                                    em priority.routes (ou a rota não define
+     *                                    'priority').
+     */
+    public function produceRoutedBatch(string $messageType, array $payloads, array $arguments = []): void
+    {
+        $this->producePriorityBatch(
+            $this->topology->priorityForMessageType($messageType, null),
+            $messageType,
+            $payloads,
+            $arguments
+        );
+    }
+
     private function priorityArguments(string $priority, array $arguments): array
     {
         return array_merge($arguments, $this->topology->mainQueueDeadLetterArguments($priority));

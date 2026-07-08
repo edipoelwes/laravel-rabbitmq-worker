@@ -21,7 +21,7 @@ class PublishPriorityMessageCommand extends Command
 {
     protected $signature = 'rabbitmq:priority-publish
                             {message_type : Header AMQP message_type (deve estar mapeado em priority.routes)}
-                            {--priority= : Prioridade da fila (high|default|low). Padrão: a da rota no config, senão default}
+                            {--priority= : Override explícito da prioridade (high|default|low). Sem essa opção, é inferida de priority.routes.<message_type>.priority}
                             {--payload= : Payload JSON do corpo da mensagem. Padrão: {"ping_id":1} }
                             {--count=1 : Quantidade de mensagens (count > 1 usa publicação em lote)}';
 
@@ -39,20 +39,45 @@ class PublishPriorityMessageCommand extends Command
         }
 
         $route = config("laravel-rabbitmq-worker.priority.routes.{$messageType}");
+        $priorityOption = $this->option('priority');
+
         if (!$route) {
             $this->warn("message_type '{$messageType}' NÃO está mapeado em priority.routes.");
             $this->warn('A mensagem será publicada, mas o PriorityMessageRouter vai rejeitá-la (reject sem requeue).');
+
+            if (!$priorityOption) {
+                $this->error('Sem --priority explícito e sem rota mapeada, não há como inferir a prioridade. Informe --priority=high|default|low.');
+                return self::FAILURE;
+            }
+
             if (!$this->confirm('Publicar mesmo assim?')) {
                 return self::FAILURE;
             }
         }
 
-        $priority = $this->option('priority') ?: ($route['priority'] ?? 'default');
+        try {
+            if ($priorityOption) {
+                // Override explícito: ignora a inferência e usa a prioridade informada.
+                $priority = $priorityOption;
 
-        if ($count === 1) {
-            $producer->producePriority($priority, $messageType, $payload);
-        } else {
-            $producer->producePriorityBatch($priority, $messageType, array_fill(0, $count, $payload));
+                if ($count === 1) {
+                    $producer->producePriority($priority, $messageType, $payload);
+                } else {
+                    $producer->producePriorityBatch($priority, $messageType, array_fill(0, $count, $payload));
+                }
+            } else {
+                // Sem --priority: infere via priority.routes.<message_type>.priority.
+                $priority = $route['priority'] ?? null;
+
+                if ($count === 1) {
+                    $producer->produceRouted($messageType, $payload);
+                } else {
+                    $producer->produceRoutedBatch($messageType, array_fill(0, $count, $payload));
+                }
+            }
+        } catch (\InvalidArgumentException $e) {
+            $this->error($e->getMessage());
+            return self::FAILURE;
         }
 
         $queue = config("laravel-rabbitmq-worker.priority.queues.{$priority}");

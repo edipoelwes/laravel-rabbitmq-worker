@@ -15,6 +15,8 @@ namespace Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq;
  */
 class PriorityQueueTopology
 {
+    private const VALID_PRIORITIES = ['high', 'default', 'low'];
+
     public function queueName(string $priority): string
     {
         $queueName = config("laravel-rabbitmq-worker.priority.queues.{$priority}");
@@ -24,6 +26,58 @@ class PriorityQueueTopology
         }
 
         return $queueName;
+    }
+
+    /**
+     * Rota configurada em priority.routes para o message_type, ou null se
+     * não houver nenhuma.
+     */
+    public function route(string $messageType): ?array
+    {
+        $route = config("laravel-rabbitmq-worker.priority.routes.{$messageType}");
+
+        return is_array($route) ? $route : null;
+    }
+
+    /**
+     * Resolve a prioridade configurada em priority.routes.<message_type>.priority.
+     *
+     * @param string|null $fallback Usado quando não há rota (ou a rota não define
+     *                              `priority`). Passe null para lançar exceção
+     *                              nesse caso em vez de cair num valor padrão.
+     *
+     * @throws \InvalidArgumentException quando não há rota e $fallback é null,
+     *                                    ou quando a prioridade configurada não é
+     *                                    high|default|low.
+     */
+    public function priorityForMessageType(string $messageType, ?string $fallback = 'default'): string
+    {
+        $route = $this->route($messageType);
+        $priority = $route['priority'] ?? null;
+
+        if ($priority === null) {
+            if ($fallback === null) {
+                throw new \InvalidArgumentException(
+                    "message_type '{$messageType}' não está mapeado em priority.routes (ou não define 'priority')."
+                );
+            }
+
+            $priority = $fallback;
+        }
+
+        return $this->assertValidPriority($priority, $messageType);
+    }
+
+    private function assertValidPriority(string $priority, string $messageType): string
+    {
+        if (!in_array($priority, self::VALID_PRIORITIES, true)) {
+            throw new \InvalidArgumentException(
+                "Prioridade '{$priority}' configurada para message_type '{$messageType}' é inválida. "
+                . 'Valores aceitos: ' . implode(', ', self::VALID_PRIORITIES) . '.'
+            );
+        }
+
+        return $priority;
     }
 
     public function deadLetterEnabled(string $priority): bool
