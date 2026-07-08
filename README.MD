@@ -69,6 +69,51 @@ $rabbitMQService->publish($payload);
 $rabbitMQService->destruct(); // Clean up resources
 ```
 
+### Publishing with message headers
+
+Use message headers when your consumer routing depends on AMQP `application_headers`. This is separate from queue declaration arguments.
+
+```php
+<?php
+
+use Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ\RabbitMQService;
+
+$rabbitMQService = new RabbitMQService(
+    'dasa_priority_low',
+    'dasa_priority_low'
+);
+
+$rabbitMQService->publishWithHeaders(
+    json_encode(['fiad_id' => 123]),
+    ['message_type' => 'dasa_update_pbzpa']
+);
+
+$rabbitMQService->destruct();
+```
+
+### Publishing a batch with message headers
+
+```php
+<?php
+
+use Edipoelwes\LaravelRabbitmqWorker\Services\RabbitMQ\RabbitMQService;
+
+$rabbitMQService = new RabbitMQService(
+    'dasa_priority_low',
+    'dasa_priority_low'
+);
+
+$rabbitMQService->publishBatchWithHeaders(
+    [
+        ['fiad_id' => 1],
+        ['fiad_id' => 2],
+    ],
+    ['message_type' => 'dasa_update_pbzpa']
+);
+
+$rabbitMQService->destruct();
+```
+
 ### Creating a consumer
 
 ```php
@@ -336,9 +381,28 @@ $queueProducer->produceBatch('your-queue-name', $messages, [
     'x-dead-letter-routing-key' => ['S', 'your-queue-name.dlq'],
     'x-delivery-limit'          => ['I', 3],
 ]);
+
+// Publish with AMQP application headers
+$queueProducer->produceWithHeaders(
+    'dasa_priority_low',
+    ['fiad_id' => 123],
+    ['message_type' => 'dasa_update_pbzpa']
+);
+
+// Batch publish with AMQP application headers
+$queueProducer->produceBatchWithHeaders(
+    'dasa_priority_low',
+    [
+        ['fiad_id' => 1],
+        ['fiad_id' => 2],
+    ],
+    ['message_type' => 'dasa_update_pbzpa']
+);
 ```
 
 > **Note:** The `$arguments` parameter in `QueueProducer` is optional. When provided, they must match the arguments used by the consumer to avoid `PRECONDITION_FAILED` errors.
+>
+> `arguments` configure the queue itself (`x-message-ttl`, DLQ, quorum, etc.). `headers` configure the message being published (`message_type`, tenant, trace metadata, etc.). They solve different problems and should not be mixed.
 
 # Remote procedure call (RPC)
 ## Configuration for RPC

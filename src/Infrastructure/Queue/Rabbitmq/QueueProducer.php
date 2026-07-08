@@ -15,22 +15,32 @@ class QueueProducer
 
     public function produce(string $queueName, array $payload, array $arguments = []): void
     {
+        $this->produceWithHeaders($queueName, $payload, [], $arguments);
+    }
+
+    public function produceWithHeaders(string $queueName, array $payload, array $headers = [], array $arguments = []): void
+    {
         $serializedPayload = json_encode($payload);
         $rabbitmqConnector = $this->queueBuilder->setQueueName($queueName)
             ->setRouteKey($queueName)
             ->setArguments($arguments)
             ->getQueue();
-        $rabbitmqConnector->publish($serializedPayload);
+        $rabbitmqConnector->publishWithHeaders($serializedPayload, $headers);
         $rabbitmqConnector->destruct();
     }
 
     public function produceBatch(string $queueName, array $payload, array $arguments = []): void
     {
+        $this->produceBatchWithHeaders($queueName, $payload, [], $arguments);
+    }
+
+    public function produceBatchWithHeaders(string $queueName, array $payloads, array $headers = [], array $arguments = []): void
+    {
         $rabbitmqConnector = $this->queueBuilder->setQueueName($queueName)
             ->setRouteKey($queueName)
             ->setArguments($arguments)
             ->getQueue();
-        $rabbitmqConnector->publishBatch($payload);
+        $rabbitmqConnector->publishBatchWithHeaders($payloads, $headers);
         $rabbitmqConnector->destruct();
     }
 }
