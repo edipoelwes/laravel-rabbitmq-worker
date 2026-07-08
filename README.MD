@@ -484,3 +484,79 @@ $response = $rabbitMQService->publishRpc($payload);
 
 $rabbitMQService->destruct(); // Clean up resources
 ```
+
+## Priority queues (high/default/low)
+
+Em vez de uma fila dedicada por ação, consolide o consumo em 3 filas físicas por
+prioridade. Cada mensagem carrega o header AMQP `message_type`, e o
+`PriorityMessageRouter` resolve o consumer da aplicação em
+`config('laravel-rabbitmq-worker.priority.routes')`.
+
+### 1. Configure as filas e rotas (config publicado da aplicação)
+
+```php
+// config/laravel-rabbitmq-worker.php
+// ATENÇÃO: o mergeConfigFrom é raso — defina o bloco `priority` completo.
+'priority' => [
+    'queues' => [
+        'high'    => env('RABBITMQ_PRIORITY_QUEUE_HIGH', 'priority_high'),
+        'default' => env('RABBITMQ_PRIORITY_QUEUE_DEFAULT', 'priority_default'),
+        'low'     => env('RABBITMQ_PRIORITY_QUEUE_LOW', 'priority_low'),
+    ],
+    'routes' => [
+        'meu_message_type' => [
+            'priority' => 'default',
+            'consumer' => \App\Consumers\MeuConsumer::class, // classe com process($message)
+        ],
+    ],
+],
+```
+
+### 2. Crie o worker da fila (uma subclasse fina por prioridade ativa)
+
+```php
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\PriorityQueueConsumerAbstract;
+
+class PriorityDefaultCommand extends PriorityQueueConsumerAbstract
+{
+    protected $signature = 'priority_default';       // nome usado em RABBITMQ_LARAVEL_WORKERS
+    protected string $priority = 'default';
+}
+```
+
+### 3. Crie o consumer da ação (PriorityConsumerInterface)
+
+```php
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\PriorityConsumerInterface;
+
+class MeuConsumer implements PriorityConsumerInterface
+{
+    public function process($message): void
+    {
+        $data = json_decode($message->body, true);
+        // regra de negócio; o consumer decide ack/nack/reject
+        $message->ack();
+    }
+}
+```
+
+### 4. Publique com o header de roteamento
+
+```php
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\QueueProducer;
+
+app(QueueProducer::class)->producePriority('default', 'meu_message_type', ['id' => 123]);
+app(QueueProducer::class)->producePriorityBatch('default', 'meu_message_type', $payloads);
+```
+
+### 5. Teste manual
+
+```bash
+php artisan rabbitmq:priority-publish meu_message_type --payload='{"id":123}'
+php artisan rabbitmq:priority-publish meu_message_type --priority=low --count=5
+```
+
+Mensagens sem header `message_type` ou com tipo não mapeado são rejeitadas sem
+requeue (`reject(false)`) e logadas — a fila nunca trava por mensagem
+desconhecida. Lembre-se: workers são processos de longa duração; após alterar
+`priority.routes`, reinicie os workers.

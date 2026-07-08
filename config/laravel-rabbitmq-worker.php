@@ -18,5 +18,32 @@ return [
         'heartbeat' => (int) env('RABBITMQ_HEARTBEAT', 30),
         'channel_rpc_timeout' => (float) env('RABBITMQ_CHANNEL_RPC_TIMEOUUT', 0.0),
         'ssl_protocol' => env('RABBITMQ_SSL_PROTOCOL', null),
-    ]
+    ],
+
+    /*
+     * Consolidação de filas por prioridade: em vez de uma fila dedicada por
+     * ação, as mensagens são publicadas em 3 filas físicas (high/default/low)
+     * com o header AMQP `message_type` identificando o tipo funcional. O
+     * PriorityMessageRouter resolve o consumer em `routes` e delega para
+     * consumer::process($message).
+     *
+     * ATENÇÃO: mergeConfigFrom faz merge raso (primeiro nível). Se a aplicação
+     * definir a chave `priority` no config publicado, deve definir o bloco
+     * completo (queues + routes).
+     */
+    'priority' => [
+        'queues' => [
+            'high' => env('RABBITMQ_PRIORITY_QUEUE_HIGH', 'priority_high'),
+            'default' => env('RABBITMQ_PRIORITY_QUEUE_DEFAULT', 'priority_default'),
+            'low' => env('RABBITMQ_PRIORITY_QUEUE_LOW', 'priority_low'),
+        ],
+
+        /*
+         * Mapa de roteamento da aplicação: message_type => [
+         *     'priority' => 'high'|'default'|'low',
+         *     'consumer' => classe com process($message) (PriorityConsumerInterface),
+         * ]
+         */
+        'routes' => [],
+    ],
 ];

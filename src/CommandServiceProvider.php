@@ -2,6 +2,7 @@
 
 namespace Edipoelwes\LaravelRabbitmqWorker;
 
+use Edipoelwes\LaravelRabbitmqWorker\Commands\PublishPriorityMessageCommand;
 use Edipoelwes\LaravelRabbitmqWorker\Commands\RunCommand;
 use Illuminate\Support\ServiceProvider;
 
@@ -21,6 +22,7 @@ class CommandServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 RunCommand::class,
+                PublishPriorityMessageCommand::class,
             ]);
         }
     }

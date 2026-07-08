@@ -43,4 +43,48 @@ class QueueProducer
         $rabbitmqConnector->publishBatchWithHeaders($payloads, $headers);
         $rabbitmqConnector->destruct();
     }
+
+    /**
+     * Publica um payload único na fila física da prioridade informada, marcando
+     * o tipo funcional da mensagem via header `message_type` para o
+     * PriorityMessageRouter delegar ao consumer correto.
+     *
+     * @param string|null $priority 'high'|'default'|'low'. Nulo cai em 'default'.
+     */
+    public function producePriority(?string $priority, string $messageType, array $payload, array $arguments = []): void
+    {
+        $this->produceWithHeaders(
+            $this->resolvePriorityQueue($priority),
+            $payload,
+            ['message_type' => $messageType],
+            $arguments
+        );
+    }
+
+    /**
+     * Versão em lote de producePriority().
+     *
+     * @param string|null $priority 'high'|'default'|'low'. Nulo cai em 'default'.
+     */
+    public function producePriorityBatch(?string $priority, string $messageType, array $payloads, array $arguments = []): void
+    {
+        $this->produceBatchWithHeaders(
+            $this->resolvePriorityQueue($priority),
+            $payloads,
+            ['message_type' => $messageType],
+            $arguments
+        );
+    }
+
+    private function resolvePriorityQueue(?string $priority): string
+    {
+        $priority = $priority ?: 'default';
+        $queueName = config("laravel-rabbitmq-worker.priority.queues.{$priority}");
+
+        if (!$queueName) {
+            throw new \InvalidArgumentException("Prioridade RabbitMQ não mapeada: {$priority}");
+        }
+
+        return $queueName;
+    }
 }
