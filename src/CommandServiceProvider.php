@@ -2,6 +2,9 @@
 
 namespace Edipoelwes\LaravelRabbitmqWorker;
 
+use Edipoelwes\LaravelRabbitmqWorker\Commands\PriorityDefaultConsumerCommand;
+use Edipoelwes\LaravelRabbitmqWorker\Commands\PriorityHighConsumerCommand;
+use Edipoelwes\LaravelRabbitmqWorker\Commands\PriorityLowConsumerCommand;
 use Edipoelwes\LaravelRabbitmqWorker\Commands\PublishPriorityMessageCommand;
 use Edipoelwes\LaravelRabbitmqWorker\Commands\RunCommand;
 use Illuminate\Support\ServiceProvider;
@@ -23,6 +26,9 @@ class CommandServiceProvider extends ServiceProvider
             $this->commands([
                 RunCommand::class,
                 PublishPriorityMessageCommand::class,
+                PriorityHighConsumerCommand::class,
+                PriorityDefaultConsumerCommand::class,
+                PriorityLowConsumerCommand::class,
             ]);
         }
     }

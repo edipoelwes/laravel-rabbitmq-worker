@@ -9,7 +9,10 @@ use Illuminate\Support\Facades\Log;
  * Resolve a fila física em config('laravel-rabbitmq-worker.priority.queues')
  * a partir de $priority e delega cada mensagem ao PriorityMessageRouter.
  *
- * A aplicação só precisa de uma subclasse fina por prioridade ativa:
+ * A lib já fornece um command concreto por prioridade (ver
+ * Commands\PriorityHighConsumerCommand etc.), nomeado como
+ * "<command_prefix>_priority_<priority>". Uma subclasse só precisa definir
+ * $signature se quiser um nome fora desse padrão:
  *
  *     class PriorityDefaultCommand extends PriorityQueueConsumerAbstract
  *     {
@@ -21,6 +24,21 @@ abstract class PriorityQueueConsumerAbstract extends QueueConsumerAbstract
 {
     /** 'high'|'default'|'low' */
     protected string $priority = 'default';
+
+    public function __construct()
+    {
+        if (empty($this->signature)) {
+            $prefix = config('laravel-rabbitmq-worker.command_prefix', 'rabbitmq');
+            $this->signature = "{$prefix}_priority_{$this->priority}";
+        }
+
+        parent::__construct();
+    }
+
+    public function getPriority(): string
+    {
+        return $this->priority;
+    }
 
     public function handle(): void
     {

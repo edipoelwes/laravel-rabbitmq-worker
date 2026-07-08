@@ -1,6 +1,14 @@
 <?php
 
 return [
+    /*
+     * Prefixo dos commands Artisan de consumo por prioridade fornecidos pela
+     * lib. O nome final registrado é "<prefix>_priority_<high|default|low>".
+     * Ex.: RABBITMQ_COMMAND_PREFIX=dasa registra dasa_priority_high,
+     * dasa_priority_default e dasa_priority_low.
+     */
+    'command_prefix' => env('RABBITMQ_COMMAND_PREFIX', 'rabbitmq'),
+
     'connections' => [
         'host' => env('RABBITMQ_HOST', 'localhost'),
         'port' => env('RABBITMQ_PORT', 5672),
