@@ -139,7 +139,7 @@ class ClusterHostSelector
         $defaults = $this->baseDefaults();
 
         if (!is_array($configuredHosts) || $configuredHosts === []) {
-            return [$defaults];
+            return [$this->sanitizeTimeouts($defaults)];
         }
 
         $normalized = [];
@@ -158,10 +158,24 @@ class ClusterHostSelector
                 continue;
             }
 
-            $normalized[] = array_merge($defaults, $configuredHost, ['host' => $host]);
+            $normalized[] = $this->sanitizeTimeouts(array_merge($defaults, $configuredHost, ['host' => $host]));
         }
 
-        return $normalized !== [] ? array_values($normalized) : [$defaults];
+        return $normalized !== [] ? array_values($normalized) : [$this->sanitizeTimeouts($defaults)];
+    }
+
+    private function sanitizeTimeouts(array $host): array
+    {
+        // O php-amqplib exige read_write_timeout >= 2x heartbeat; abaixo disso a
+        // detecção de heartbeat quebra e um nó caído deixa o socket pendurado.
+        $heartbeat = (int) ($host['heartbeat'] ?? 0);
+        $readWriteTimeout = (float) ($host['read_write_timeout'] ?? 3.0);
+
+        if ($heartbeat > 0 && $readWriteTimeout < 2 * $heartbeat) {
+            $host['read_write_timeout'] = (float) (2 * $heartbeat);
+        }
+
+        return $host;
     }
 
     private function baseDefaults(): array

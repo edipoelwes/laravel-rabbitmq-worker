@@ -7,7 +7,6 @@ use Illuminate\Support\Str;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Exception\AMQPChannelClosedException;
 use PhpAmqpLib\Exception\AMQPConnectionClosedException;
-use RuntimeException;
 use Throwable;
 
 abstract class RabbitMQ
@@ -83,13 +82,7 @@ abstract class RabbitMQ
 
     public function destruct()
     {
-        if ($this->channel) {
-            $this->channel->close();
-        }
-
-        if ($this->connection) {
-            $this->connection->close();
-        }
+        $this->closeResources();
     }
 
     public function connectedHost(): array
@@ -101,9 +94,7 @@ abstract class RabbitMQ
 
     protected function connectToCluster(): void
     {
-        $connectionConfig = (array) config('laravel-rabbitmq-worker.connections', []);
-        $clusterConfig = (array) config('laravel-rabbitmq-worker.cluster', []);
-        $selector = new ClusterHostSelector($connectionConfig, $clusterConfig);
+        $selector = $this->clusterSelector();
 
         $latestException = null;
         $errors = [];
@@ -153,11 +144,39 @@ abstract class RabbitMQ
             }
         }
 
-        throw new RuntimeException(
+        throw new ClusterConnectionException(
             'RabbitMQ cluster connection failed for all configured hosts. Attempts: ' . implode(' | ', $errors),
             0,
             $latestException
         );
+    }
+
+    protected function clusterSelector(): ClusterHostSelector
+    {
+        $connectionConfig = (array) config('laravel-rabbitmq-worker.connections', []);
+        $clusterConfig = (array) config('laravel-rabbitmq-worker.cluster', []);
+
+        return new ClusterHostSelector($connectionConfig, $clusterConfig);
+    }
+
+    /**
+     * Coloca o host atual em cooldown para que a próxima conexão vá direto
+     * a um nó saudável, sem gastar connection_timeout no nó que caiu.
+     */
+    protected function markConnectedHostAsFailed(?string $error = null): void
+    {
+        if ($this->connectedHost !== []) {
+            $this->clusterSelector()->rememberFailedHost($this->connectedHost, $error);
+        }
+    }
+
+    protected function ensureConnected(): void
+    {
+        if ($this->connection && $this->connection->isConnected() && $this->channel && $this->channel->is_open()) {
+            return;
+        }
+
+        $this->reconnect();
     }
 
     /**
@@ -183,7 +202,7 @@ abstract class RabbitMQ
         }
     }
 
-    private function closeResources(): void
+    protected function closeResources(): void
     {
         try {
             if ($this->channel) {

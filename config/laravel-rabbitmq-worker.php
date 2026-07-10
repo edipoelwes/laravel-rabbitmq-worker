@@ -58,6 +58,27 @@ return [
     'management' => [
         'urls' => $rabbitMqManagementUrls,
     ],
+    'publisher' => [
+        // Tentativas de publicação; a cada falha o host atual entra em cooldown
+        // e a próxima tentativa reconecta direto em um nó saudável.
+        'max_attempts' => (int) env('RABBITMQ_PUBLISHER_MAX_ATTEMPTS', 3),
+        // Publisher confirms: aguarda o broker confirmar o recebimento antes de
+        // retornar. Evita perda silenciosa de mensagem quando o nó cai no meio
+        // do publish, ao custo de uma ida a mais ao broker.
+        'confirm' => (bool) env('RABBITMQ_PUBLISHER_CONFIRM', false),
+        'confirm_timeout_seconds' => (int) env('RABBITMQ_PUBLISHER_CONFIRM_TIMEOUT_SECONDS', 5),
+    ],
+    'consumer' => [
+        // Janela de espera do consume() quando nenhum timeout explícito é passado.
+        // A cada janela sem mensagens o worker valida a conexão via heartbeat,
+        // detectando nó que caiu sem fechar o socket.
+        'wait_timeout_seconds' => (int) env('RABBITMQ_CONSUMER_WAIT_TIMEOUT_SECONDS', 10),
+        // 0 = reconecta indefinidamente; N > 0 encerra o processo após N quedas
+        // consecutivas (para o supervisor assumir).
+        'max_reconnect_attempts' => (int) env('RABBITMQ_CONSUMER_MAX_RECONNECT_ATTEMPTS', 0),
+        'reconnect_base_delay_seconds' => (int) env('RABBITMQ_CONSUMER_RECONNECT_BASE_DELAY_SECONDS', 1),
+        'reconnect_max_delay_seconds' => (int) env('RABBITMQ_CONSUMER_RECONNECT_MAX_DELAY_SECONDS', 30),
+    ],
     'cluster' => [
         'last_host_cache_key' => env('RABBITMQ_LAST_HOST_CACHE_KEY', 'rabbitmq:cluster:last-success-host'),
         'last_index_cache_key' => env('RABBITMQ_LAST_INDEX_CACHE_KEY', 'rabbitmq:cluster:last-success-index'),
