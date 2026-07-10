@@ -8,6 +8,7 @@ use PhpAmqpLib\Exception\AMQPConnectionClosedException;
 use PhpAmqpLib\Exception\AMQPRuntimeException;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Exception\AMQPTimeoutException;
+use PhpAmqpLib\Wire\AMQPTable;
 
 class RabbitMQService extends RabbitMQ
 {
@@ -18,15 +19,20 @@ class RabbitMQService extends RabbitMQ
 
     public function publish(string $message)
     {
+        $this->publishWithHeaders($message);
+    }
+
+    public function publishWithHeaders(string $message, array $headers = [])
+    {
         try {
             $this->queue_declare();
-            $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
+            $msg = new AMQPMessage($message, $this->buildMessageProperties($headers));
             $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
         } catch (AMQPConnectionClosedException|AMQPChannelClosedException $exception) {
             $this->reconnect();
             $this->queue_declare();
 
-            $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
+            $msg = new AMQPMessage($message, $this->buildMessageProperties($headers));
             $this->channel->basic_publish($msg, $this->exchange, $this->routingKey);
         } catch (\Throwable $th) {
             Log::error(__METHOD__ . ' ' . __LINE__,  ['context' => $th->getMessage()]);
@@ -36,10 +42,15 @@ class RabbitMQService extends RabbitMQ
 
     public function publishBatch(array $messages)
     {
+        $this->publishBatchWithHeaders($messages);
+    }
+
+    public function publishBatchWithHeaders(array $messages, array $headers = [])
+    {
         try {
             $this->queue_declare();
             foreach ($messages as $message) {
-                $msg = new AMQPMessage(json_encode($message), array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
+                $msg = new AMQPMessage(json_encode($message), $this->buildMessageProperties($headers));
                 $this->channel->batch_basic_publish($msg, $this->exchange, $this->routingKey);
             }
 
@@ -49,7 +60,7 @@ class RabbitMQService extends RabbitMQ
             $this->queue_declare();
 
             foreach ($messages as $message) {
-                $msg = new AMQPMessage(json_encode($message), array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
+                $msg = new AMQPMessage(json_encode($message), $this->buildMessageProperties($headers));
                 $this->channel->batch_basic_publish($msg, $this->exchange, $this->routingKey);
             }
 
@@ -126,5 +137,18 @@ class RabbitMQService extends RabbitMQ
             Log::warning(__METHOD__ . ' ' . __LINE__,  ['context' => $th->getMessage()]);
             throw $th;
         }
+    }
+
+    private function buildMessageProperties(array $headers = []): array
+    {
+        $properties = [
+            'delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT,
+        ];
+
+        if (!empty($headers)) {
+            $properties['application_headers'] = new AMQPTable($headers);
+        }
+
+        return $properties;
     }
 }

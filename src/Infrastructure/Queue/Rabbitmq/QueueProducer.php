@@ -7,30 +7,125 @@ class QueueProducer
 
     private QueueBuilder $queueBuilder;
 
+    private PriorityQueueTopology $topology;
+
     public function __construct(
-        QueueBuilder $queueBuilder
+        QueueBuilder $queueBuilder,
+        PriorityQueueTopology $topology
     ) {
         $this->queueBuilder = $queueBuilder;
+        $this->topology = $topology;
     }
 
     public function produce(string $queueName, array $payload, array $arguments = []): void
+    {
+        $this->produceWithHeaders($queueName, $payload, [], $arguments);
+    }
+
+    public function produceWithHeaders(string $queueName, array $payload, array $headers = [], array $arguments = []): void
     {
         $serializedPayload = json_encode($payload);
         $rabbitmqConnector = $this->queueBuilder->setQueueName($queueName)
             ->setRouteKey($queueName)
             ->setArguments($arguments)
             ->getQueue();
-        $rabbitmqConnector->publish($serializedPayload);
+        $rabbitmqConnector->publishWithHeaders($serializedPayload, $headers);
         $rabbitmqConnector->destruct();
     }
 
     public function produceBatch(string $queueName, array $payload, array $arguments = []): void
     {
+        $this->produceBatchWithHeaders($queueName, $payload, [], $arguments);
+    }
+
+    public function produceBatchWithHeaders(string $queueName, array $payloads, array $headers = [], array $arguments = []): void
+    {
         $rabbitmqConnector = $this->queueBuilder->setQueueName($queueName)
             ->setRouteKey($queueName)
             ->setArguments($arguments)
             ->getQueue();
-        $rabbitmqConnector->publishBatch($payload);
+        $rabbitmqConnector->publishBatchWithHeaders($payloads, $headers);
         $rabbitmqConnector->destruct();
+    }
+
+    /**
+     * Publica um payload único na fila física da prioridade informada, marcando
+     * o tipo funcional da mensagem via header `message_type` para o
+     * PriorityMessageRouter delegar ao consumer correto.
+     *
+     * Os argumentos AMQP da fila (DLQ/delivery-limit) são resolvidos
+     * automaticamente pela mesma topologia usada pelo consumer, para evitar
+     * PRECONDITION_FAILED por divergência de argumentos.
+     *
+     * @param string|null $priority 'high'|'default'|'low'. Nulo cai em 'default'.
+     */
+    public function producePriority(?string $priority, string $messageType, array $payload, array $arguments = []): void
+    {
+        $priority = $priority ?: 'default';
+
+        $this->produceWithHeaders(
+            $this->topology->queueName($priority),
+            $payload,
+            ['message_type' => $messageType],
+            $this->priorityArguments($priority, $arguments)
+        );
+    }
+
+    /**
+     * Versão em lote de producePriority().
+     *
+     * @param string|null $priority 'high'|'default'|'low'. Nulo cai em 'default'.
+     */
+    public function producePriorityBatch(?string $priority, string $messageType, array $payloads, array $arguments = []): void
+    {
+        $priority = $priority ?: 'default';
+
+        $this->produceBatchWithHeaders(
+            $this->topology->queueName($priority),
+            $payloads,
+            ['message_type' => $messageType],
+            $this->priorityArguments($priority, $arguments)
+        );
+    }
+
+    /**
+     * Publica um payload único inferindo a prioridade a partir de
+     * config('laravel-rabbitmq-worker.priority.routes.<message_type>.priority'),
+     * eliminando a necessidade de repetir 'high'|'default'|'low' no app.
+     *
+     * @throws \InvalidArgumentException quando o message_type não está mapeado
+     *                                    em priority.routes (ou a rota não define
+     *                                    'priority').
+     */
+    public function produceRouted(string $messageType, array $payload, array $arguments = []): void
+    {
+        $this->producePriority(
+            $this->topology->priorityForMessageType($messageType, null),
+            $messageType,
+            $payload,
+            $arguments
+        );
+    }
+
+    /**
+     * Versão em lote de produceRouted().
+     *
+     * @throws \InvalidArgumentException quando o message_type não está mapeado
+     *                                    em priority.routes (ou a rota não define
+     *                                    'priority').
+     */
+    public function produceRoutedBatch(string $messageType, array $payloads, array $arguments = []): void
+    {
+        $this->producePriorityBatch(
+            $this->topology->priorityForMessageType($messageType, null),
+            $messageType,
+            $payloads,
+            $arguments
+        );
+    }
+
+    private function priorityArguments(string $priority, array $arguments): array
+    {
+        return array_merge($arguments, $this->topology->mainQueueDeadLetterArguments($priority));
     }
 }
