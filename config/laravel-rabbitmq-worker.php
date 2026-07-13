@@ -29,6 +29,17 @@ return [
     ],
 
     /*
+     * Réplicas iniciais das filas quorum (x-quorum-initial-group-size).
+     * Define em quantos nós do cluster a fila nasce replicada. O argumento só
+     * tem efeito no momento da criação da fila: filas que já existem no broker
+     * não são alteradas por ele (use `rabbitmq-queues grow` ou recrie a fila).
+     * Use 0 para não enviar o argumento e deixar o default do broker.
+     */
+    'quorum' => [
+        'initial_group_size' => (int) env('RABBITMQ_QUORUM_INITIAL_GROUP_SIZE', 3),
+    ],
+
+    /*
      * Consolidação de filas por prioridade: em vez de uma fila dedicada por
      * ação, as mensagens são publicadas em 3 filas físicas (high/default/low)
      * com o header AMQP `message_type` identificando o tipo funcional. O

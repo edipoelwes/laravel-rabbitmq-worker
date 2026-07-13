@@ -265,6 +265,28 @@ Each argument follows the AMQP type notation: `'argument-name' => ['type', value
 
 > **`setArguments()` replaces** the arguments array entirely — what you pass is exactly what reaches the broker (merged with the base default `x-queue-type: quorum` in the constructor). To override the default, include `x-queue-type` in your own arguments.
 
+### Quorum replication (`x-quorum-initial-group-size`)
+
+Whenever the final queue type is `quorum`, the lib also sends
+`x-quorum-initial-group-size` so the queue is born replicated across the
+expected number of cluster nodes. The value comes from
+`config('laravel-rabbitmq-worker.quorum.initial_group_size')`:
+
+```
+RABBITMQ_QUORUM_INITIAL_GROUP_SIZE=3   # default: 3 (set 0 to omit the argument)
+```
+
+Notes:
+
+- The argument only takes effect **when the queue is created**. Queues that
+  already exist on the broker keep their current members — grow them with
+  `rabbitmq-queues grow <node> all` or delete/redeclare the queue.
+- With 3 replicas a quorum queue tolerates 1 node down (majority of 2); a
+  queue created with a single member becomes unavailable whenever its node
+  goes down.
+- Passing `x-quorum-initial-group-size` explicitly in your own arguments takes
+  precedence over the config value.
+
 Using `QueueConsumerAbstract`, override the `$arguments` property in your subclass:
 
 ```php
