@@ -25,6 +25,14 @@ abstract class PriorityQueueConsumerAbstract extends QueueConsumerAbstract
     /** 'high'|'default'|'low' */
     protected string $priority = 'default';
 
+    /**
+     * A DLQ das filas de prioridade é garantida pela PriorityQueueTopology
+     * (ensureDeadLetterQueue em handle()), que respeita suffix/queue_type
+     * configuráveis por prioridade — o ensure genérico do pai fica desligado
+     * para não redeclarar a mesma fila com argumentos potencialmente diferentes.
+     */
+    protected bool $ensureDeadLetterFromArguments = false;
+
     public function __construct()
     {
         if (empty($this->signature)) {
