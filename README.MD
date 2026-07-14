@@ -626,6 +626,66 @@ app(QueueProducer::class)->producePriority('low', 'meu_message_type', ['id' => 1
 app(QueueProducer::class)->producePriorityBatch('low', 'meu_message_type', $payloads);
 ```
 
+### 4.1. Publicando no namespace de outro sistema (`remotes`)
+
+Quando dois sistemas compartilham o mesmo broker e cada um é dono das suas
+filas de prioridade (ex.: `dasa_priority_*` consumidas pelo DASA e
+`eco-utm_priority_*` consumidas pelo Eco UTM), o produtor publica nas filas do
+**outro** sistema declarando a topologia dele em `priority.remotes`:
+
+```php
+'priority' => [
+    // topologia LOCAL: as filas que ESTE app consome
+    'queues' => [
+        'high' => 'eco-utm_priority_high',
+        'default' => 'eco-utm_priority_default',
+        'low' => 'eco-utm_priority_low',
+    ],
+
+    // topologias REMOTAS: filas de outros sistemas, só para publicação.
+    // queues e dead_letter DEVEM espelhar a config do sistema remoto,
+    // senão o queue_declare do produtor gera PRECONDITION_FAILED.
+    'remotes' => [
+        'dasa' => [
+            'queues' => [
+                'high' => 'dasa_priority_high',
+                'default' => 'dasa_priority_default',
+                'low' => 'dasa_priority_low',
+            ],
+            'dead_letter' => [
+                'enabled' => true,
+                'suffix' => '.dlq',
+                'delivery_limit' => 3,
+                'queue_type' => 'quorum',
+            ],
+        ],
+    ],
+
+    'routes' => [
+        // outbound: publica na fila do DASA; sem 'consumer' (quem processa é o DASA)
+        'eco-utm_flight-requests' => ['priority' => 'high', 'remote' => 'dasa'],
+
+        // inbound/interno: fila local, com consumer deste app
+        'minha_rotina_interna' => ['priority' => 'low', 'consumer' => MinhaRotina::class],
+    ],
+],
+```
+
+`produceRouted()`/`produceRoutedBatch()` inferem o `remote` da rota — o código
+da aplicação não muda. Para override explícito, `producePriority()` e
+`producePriorityBatch()` aceitam o namespace como quinto parâmetro:
+
+```php
+app(QueueProducer::class)->produceRouted('eco-utm_flight-requests', ['id' => 123]); // vai para dasa_priority_high
+app(QueueProducer::class)->producePriority('high', 'meu_message_type', $payload, [], 'dasa');
+```
+
+O **consumo é sempre local**: os commands `<prefix>_priority_*` só consomem
+`priority.queues`, e a criação/consumo das DLQs de um namespace remoto é
+responsabilidade do sistema dono das filas. Uma rota com `remote` aponta para
+um nome inexistente em `priority.remotes`? `InvalidArgumentException` — falha
+rápido em vez de publicar na fila errada.
+
 ### 5. Teste manual
 
 `rabbitmq:priority-publish` usa a mesma inferência por padrão. Passe

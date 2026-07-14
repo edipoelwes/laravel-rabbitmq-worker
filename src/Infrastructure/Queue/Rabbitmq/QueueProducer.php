@@ -58,16 +58,19 @@ class QueueProducer
      * PRECONDITION_FAILED por divergência de argumentos.
      *
      * @param string|null $priority 'high'|'default'|'low'. Nulo cai em 'default'.
+     * @param string|null $remote   Namespace remoto de priority.remotes para
+     *                              publicar nas filas de prioridade de outro
+     *                              sistema. Nulo publica na topologia local.
      */
-    public function producePriority(?string $priority, string $messageType, array $payload, array $arguments = []): void
+    public function producePriority(?string $priority, string $messageType, array $payload, array $arguments = [], ?string $remote = null): void
     {
         $priority = $priority ?: 'default';
 
         $this->produceWithHeaders(
-            $this->topology->queueName($priority),
+            $this->topology->queueName($priority, $remote),
             $payload,
             ['message_type' => $messageType],
-            $this->priorityArguments($priority, $arguments)
+            $this->priorityArguments($priority, $arguments, $remote)
         );
     }
 
@@ -75,27 +78,32 @@ class QueueProducer
      * Versão em lote de producePriority().
      *
      * @param string|null $priority 'high'|'default'|'low'. Nulo cai em 'default'.
+     * @param string|null $remote   Namespace remoto de priority.remotes. Nulo
+     *                              publica na topologia local.
      */
-    public function producePriorityBatch(?string $priority, string $messageType, array $payloads, array $arguments = []): void
+    public function producePriorityBatch(?string $priority, string $messageType, array $payloads, array $arguments = [], ?string $remote = null): void
     {
         $priority = $priority ?: 'default';
 
         $this->produceBatchWithHeaders(
-            $this->topology->queueName($priority),
+            $this->topology->queueName($priority, $remote),
             $payloads,
             ['message_type' => $messageType],
-            $this->priorityArguments($priority, $arguments)
+            $this->priorityArguments($priority, $arguments, $remote)
         );
     }
 
     /**
-     * Publica um payload único inferindo a prioridade a partir de
-     * config('laravel-rabbitmq-worker.priority.routes.<message_type>.priority'),
-     * eliminando a necessidade de repetir 'high'|'default'|'low' no app.
+     * Publica um payload único inferindo prioridade e destino a partir de
+     * config('laravel-rabbitmq-worker.priority.routes.<message_type>'):
+     * `priority` define a fila high/default/low e o opcional `remote` publica
+     * no namespace de outro sistema (priority.remotes.<remote>), eliminando a
+     * necessidade de repetir 'high'|'default'|'low' ou nomes de fila no app.
      *
      * @throws \InvalidArgumentException quando o message_type não está mapeado
      *                                    em priority.routes (ou a rota não define
-     *                                    'priority').
+     *                                    'priority'), ou aponta para um remote
+     *                                    não declarado em priority.remotes.
      */
     public function produceRouted(string $messageType, array $payload, array $arguments = []): void
     {
@@ -103,7 +111,8 @@ class QueueProducer
             $this->topology->priorityForMessageType($messageType, null),
             $messageType,
             $payload,
-            $arguments
+            $arguments,
+            $this->topology->remoteForMessageType($messageType)
         );
     }
 
@@ -112,7 +121,8 @@ class QueueProducer
      *
      * @throws \InvalidArgumentException quando o message_type não está mapeado
      *                                    em priority.routes (ou a rota não define
-     *                                    'priority').
+     *                                    'priority'), ou aponta para um remote
+     *                                    não declarado em priority.remotes.
      */
     public function produceRoutedBatch(string $messageType, array $payloads, array $arguments = []): void
     {
@@ -120,12 +130,13 @@ class QueueProducer
             $this->topology->priorityForMessageType($messageType, null),
             $messageType,
             $payloads,
-            $arguments
+            $arguments,
+            $this->topology->remoteForMessageType($messageType)
         );
     }
 
-    private function priorityArguments(string $priority, array $arguments): array
+    private function priorityArguments(string $priority, array $arguments, ?string $remote = null): array
     {
-        return array_merge($arguments, $this->topology->mainQueueDeadLetterArguments($priority));
+        return array_merge($arguments, $this->topology->mainQueueDeadLetterArguments($priority, $remote));
     }
 }

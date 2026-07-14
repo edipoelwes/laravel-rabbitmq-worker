@@ -12,17 +12,25 @@ namespace Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq;
  * A DLQ é por fila física de prioridade (ex.: priority_high -> priority_high.dlq),
  * não por message_type: um app usando a lib só precisa dessas 3 filas + 3 DLQs,
  * independente de quantos message_type existam em priority.routes.
+ *
+ * Namespaces remotos: além da topologia local (priority.queues), a lib
+ * suporta publicar nas filas de prioridade de OUTRO sistema declarado em
+ * priority.remotes.<nome> (ex.: o Eco UTM publicando em dasa_priority_high,
+ * cujo consumer vive no DASA). Todos os resolvedores aceitam um $remote
+ * opcional: null resolve na topologia local; um nome resolve no bloco
+ * remoto correspondente. O CONSUMO é sempre local — remoto é só publicação.
  */
 class PriorityQueueTopology
 {
     private const VALID_PRIORITIES = ['high', 'default', 'low'];
 
-    public function queueName(string $priority): string
+    public function queueName(string $priority, ?string $remote = null): string
     {
-        $queueName = config("laravel-rabbitmq-worker.priority.queues.{$priority}");
+        $queueName = config($this->configPath('queues.' . $priority, $remote));
 
         if (!$queueName) {
-            throw new \InvalidArgumentException("Prioridade RabbitMQ não mapeada em priority.queues: {$priority}");
+            $scope = $remote ? "priority.remotes.{$remote}.queues" : 'priority.queues';
+            throw new \InvalidArgumentException("Prioridade RabbitMQ não mapeada em {$scope}: {$priority}");
         }
 
         return $queueName;
@@ -68,6 +76,32 @@ class PriorityQueueTopology
         return $this->assertValidPriority($priority, $messageType);
     }
 
+    /**
+     * Resolve o namespace remoto configurado em
+     * priority.routes.<message_type>.remote, ou null quando a rota publica na
+     * topologia local (comportamento padrão).
+     *
+     * @throws \InvalidArgumentException quando a rota aponta para um remote
+     *                                    não declarado em priority.remotes.
+     */
+    public function remoteForMessageType(string $messageType): ?string
+    {
+        $remote = $this->route($messageType)['remote'] ?? null;
+
+        if ($remote === null) {
+            return null;
+        }
+
+        if (!is_array(config("laravel-rabbitmq-worker.priority.remotes.{$remote}"))) {
+            throw new \InvalidArgumentException(
+                "message_type '{$messageType}' aponta para o remote '{$remote}', "
+                . "mas ele não está declarado em priority.remotes."
+            );
+        }
+
+        return $remote;
+    }
+
     private function assertValidPriority(string $priority, string $messageType): string
     {
         if (!in_array($priority, self::VALID_PRIORITIES, true)) {
@@ -80,24 +114,24 @@ class PriorityQueueTopology
         return $priority;
     }
 
-    public function deadLetterEnabled(string $priority): bool
+    public function deadLetterEnabled(string $priority, ?string $remote = null): bool
     {
-        return (bool) $this->dlqSetting($priority, 'enabled', true);
+        return (bool) $this->dlqSetting($priority, 'enabled', true, $remote);
     }
 
-    public function deadLetterQueueName(string $priority): string
+    public function deadLetterQueueName(string $priority, ?string $remote = null): string
     {
-        return $this->queueName($priority) . $this->dlqSetting($priority, 'suffix', '.dlq');
+        return $this->queueName($priority, $remote) . $this->dlqSetting($priority, 'suffix', '.dlq', $remote);
     }
 
-    public function deliveryLimit(string $priority): int
+    public function deliveryLimit(string $priority, ?string $remote = null): int
     {
-        return (int) $this->dlqSetting($priority, 'delivery_limit', 3);
+        return (int) $this->dlqSetting($priority, 'delivery_limit', 3, $remote);
     }
 
-    public function deadLetterQueueType(string $priority): string
+    public function deadLetterQueueType(string $priority, ?string $remote = null): string
     {
-        return (string) $this->dlqSetting($priority, 'queue_type', 'quorum');
+        return (string) $this->dlqSetting($priority, 'queue_type', 'quorum', $remote);
     }
 
     /**
@@ -105,16 +139,16 @@ class PriorityQueueTopology
      * mensagens rejeitadas/esgotadas para a DLQ correspondente. Retorna
      * array vazio quando a DLQ está desabilitada para a prioridade.
      */
-    public function mainQueueDeadLetterArguments(string $priority): array
+    public function mainQueueDeadLetterArguments(string $priority, ?string $remote = null): array
     {
-        if (!$this->deadLetterEnabled($priority)) {
+        if (!$this->deadLetterEnabled($priority, $remote)) {
             return [];
         }
 
         return [
             'x-dead-letter-exchange' => ['S', ''],
-            'x-dead-letter-routing-key' => ['S', $this->deadLetterQueueName($priority)],
-            'x-delivery-limit' => ['I', $this->deliveryLimit($priority)],
+            'x-dead-letter-routing-key' => ['S', $this->deadLetterQueueName($priority, $remote)],
+            'x-delivery-limit' => ['I', $this->deliveryLimit($priority, $remote)],
         ];
     }
 
@@ -130,7 +164,8 @@ class PriorityQueueTopology
 
     /**
      * Garante que a DLQ da prioridade exista no broker. No-op quando a DLQ
-     * está desabilitada para a prioridade.
+     * está desabilitada para a prioridade. Sempre local: DLQ de namespace
+     * remoto é responsabilidade do sistema dono das filas.
      */
     public function ensureDeadLetterQueue(string $priority, QueueBuilder $queueBuilder): void
     {
@@ -153,14 +188,27 @@ class PriorityQueueTopology
     /**
      * @return mixed
      */
-    private function dlqSetting(string $priority, string $key, $default)
+    private function dlqSetting(string $priority, string $key, $default, ?string $remote = null)
     {
-        $perPriority = config("laravel-rabbitmq-worker.priority.dead_letter.priorities.{$priority}.{$key}");
+        $perPriority = config($this->configPath("dead_letter.priorities.{$priority}.{$key}", $remote));
 
         if ($perPriority !== null) {
             return $perPriority;
         }
 
-        return config("laravel-rabbitmq-worker.priority.dead_letter.{$key}", $default);
+        return config($this->configPath("dead_letter.{$key}", $remote), $default);
+    }
+
+    /**
+     * Caminho de config do bloco de prioridade: local (priority.*) ou de um
+     * namespace remoto (priority.remotes.<nome>.*).
+     */
+    private function configPath(string $suffix, ?string $remote = null): string
+    {
+        $base = $remote === null
+            ? 'laravel-rabbitmq-worker.priority.'
+            : "laravel-rabbitmq-worker.priority.remotes.{$remote}.";
+
+        return $base . $suffix;
     }
 }

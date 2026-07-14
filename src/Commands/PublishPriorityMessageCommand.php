@@ -2,6 +2,7 @@
 
 namespace Edipoelwes\LaravelRabbitmqWorker\Commands;
 
+use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\PriorityQueueTopology;
 use Edipoelwes\LaravelRabbitmqWorker\Infrastructure\Queue\Rabbitmq\QueueProducer;
 use Illuminate\Console\Command;
 
@@ -22,6 +23,7 @@ class PublishPriorityMessageCommand extends Command
     protected $signature = 'rabbitmq:priority-publish
                             {message_type : Header AMQP message_type (deve estar mapeado em priority.routes)}
                             {--priority= : Override explícito da prioridade (high|default|low). Sem essa opção, é inferida de priority.routes.<message_type>.priority}
+                            {--remote= : Override explícito do namespace remoto (priority.remotes.<nome>). Sem essa opção, é inferido de priority.routes.<message_type>.remote}
                             {--payload= : Payload JSON do corpo da mensagem. Padrão: {"ping_id":1} }
                             {--count=1 : Quantidade de mensagens (count > 1 usa publicação em lote)}';
 
@@ -55,19 +57,23 @@ class PublishPriorityMessageCommand extends Command
             }
         }
 
+        $topology = app(PriorityQueueTopology::class);
+
         try {
             if ($priorityOption) {
                 // Override explícito: ignora a inferência e usa a prioridade informada.
                 $priority = $priorityOption;
+                $remote = $this->option('remote') ?: $topology->remoteForMessageType($messageType);
 
                 if ($count === 1) {
-                    $producer->producePriority($priority, $messageType, $payload);
+                    $producer->producePriority($priority, $messageType, $payload, [], $remote);
                 } else {
-                    $producer->producePriorityBatch($priority, $messageType, array_fill(0, $count, $payload));
+                    $producer->producePriorityBatch($priority, $messageType, array_fill(0, $count, $payload), [], $remote);
                 }
             } else {
-                // Sem --priority: infere via priority.routes.<message_type>.priority.
+                // Sem --priority: infere priority e remote via priority.routes.<message_type>.
                 $priority = $route['priority'] ?? null;
+                $remote = $topology->remoteForMessageType($messageType);
 
                 if ($count === 1) {
                     $producer->produceRouted($messageType, $payload);
@@ -75,15 +81,18 @@ class PublishPriorityMessageCommand extends Command
                     $producer->produceRoutedBatch($messageType, array_fill(0, $count, $payload));
                 }
             }
+
+            $queue = $topology->queueName($priority, $remote);
         } catch (\InvalidArgumentException $e) {
             $this->error($e->getMessage());
             return self::FAILURE;
         }
 
-        $queue = config("laravel-rabbitmq-worker.priority.queues.{$priority}");
         $this->info("Publicada(s) {$count} mensagem(ns) na fila {$queue}:");
         $this->line("  message_type: {$messageType}");
-        $this->line("  consumer:     " . ($route['consumer'] ?? 'NENHUM (será rejeitada)'));
+        $this->line("  consumer:     " . ($remote
+            ? "sistema remoto '{$remote}'"
+            : ($route['consumer'] ?? 'NENHUM (será rejeitada)')));
         $this->line("  payload:      " . json_encode($payload));
 
         return self::SUCCESS;

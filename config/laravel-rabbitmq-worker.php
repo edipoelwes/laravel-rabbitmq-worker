@@ -79,9 +79,39 @@ return [
         ],
 
         /*
+         * Namespaces REMOTOS de publicação: topologias de prioridade de outros
+         * sistemas que compartilham o mesmo broker, para publicar nas filas
+         * deles via producePriority(..., remote: '<nome>') ou rotas com
+         * 'remote'. O consumo é sempre local — quem consome/declara DLQ do
+         * namespace remoto é o sistema dono das filas. `queues` e
+         * `dead_letter` DEVEM espelhar a config do sistema remoto, senão o
+         * queue_declare do produtor diverge e gera PRECONDITION_FAILED.
+         *
+         * 'remotes' => [
+         *     'dasa' => [
+         *         'queues' => [
+         *             'high' => 'dasa_priority_high',
+         *             'default' => 'dasa_priority_default',
+         *             'low' => 'dasa_priority_low',
+         *         ],
+         *         'dead_letter' => [
+         *             'enabled' => true,
+         *             'suffix' => '.dlq',
+         *             'delivery_limit' => 3,
+         *             'queue_type' => 'quorum',
+         *         ],
+         *     ],
+         * ],
+         */
+        'remotes' => [],
+
+        /*
          * Mapa de roteamento da aplicação: message_type => [
          *     'priority' => 'high'|'default'|'low',
          *     'consumer' => classe com process($message) (PriorityConsumerInterface),
+         *     'remote' => opcional; nome em priority.remotes para publicar nas
+         *                 filas de outro sistema. Rotas com 'remote' não devem
+         *                 definir 'consumer' (quem processa é o sistema remoto).
          * ]
          */
         'routes' => [],
