@@ -1,6 +1,14 @@
 <?php
 
 return [
+    /*
+     * Prefixo dos commands Artisan de consumo por prioridade fornecidos pela
+     * lib. O nome final registrado é "<prefix>_priority_<high|default|low>".
+     * Ex.: RABBITMQ_COMMAND_PREFIX=dasa registra dasa_priority_high,
+     * dasa_priority_default e dasa_priority_low.
+     */
+    'command_prefix' => env('RABBITMQ_COMMAND_PREFIX', 'rabbitmq'),
+
     'connections' => [
         'host' => env('RABBITMQ_HOST', 'localhost'),
         'port' => env('RABBITMQ_PORT', 5672),
@@ -18,5 +26,94 @@ return [
         'heartbeat' => (int) env('RABBITMQ_HEARTBEAT', 30),
         'channel_rpc_timeout' => (float) env('RABBITMQ_CHANNEL_RPC_TIMEOUUT', 0.0),
         'ssl_protocol' => env('RABBITMQ_SSL_PROTOCOL', null),
-    ]
+    ],
+
+    /*
+     * Réplicas iniciais das filas quorum (x-quorum-initial-group-size).
+     * Define em quantos nós do cluster a fila nasce replicada. O argumento só
+     * tem efeito no momento da criação da fila: filas que já existem no broker
+     * não são alteradas por ele (use `rabbitmq-queues grow` ou recrie a fila).
+     * Use 0 para não enviar o argumento e deixar o default do broker.
+     */
+    'quorum' => [
+        'initial_group_size' => (int) env('RABBITMQ_QUORUM_INITIAL_GROUP_SIZE', 3),
+    ],
+
+    /*
+     * Consolidação de filas por prioridade: em vez de uma fila dedicada por
+     * ação, as mensagens são publicadas em 3 filas físicas (high/default/low)
+     * com o header AMQP `message_type` identificando o tipo funcional. O
+     * PriorityMessageRouter resolve o consumer em `routes` e delega para
+     * consumer::process($message).
+     *
+     * ATENÇÃO: mergeConfigFrom faz merge raso (primeiro nível). Se a aplicação
+     * definir a chave `priority` no config publicado, deve definir o bloco
+     * completo (queues + routes).
+     */
+    'priority' => [
+        'queues' => [
+            'high' => env('RABBITMQ_PRIORITY_QUEUE_HIGH', 'priority_high'),
+            'default' => env('RABBITMQ_PRIORITY_QUEUE_DEFAULT', 'priority_default'),
+            'low' => env('RABBITMQ_PRIORITY_QUEUE_LOW', 'priority_low'),
+        ],
+
+        /*
+         * DLQ por fila física de prioridade (não por message_type). Quando
+         * habilitada, a fila principal é declarada com x-dead-letter-exchange,
+         * x-dead-letter-routing-key e x-delivery-limit apontando para
+         * "<fila>.<suffix>", e a lib garante que essa fila exista antes do
+         * consumo. `priorities.<high|default|low>` permite sobrescrever
+         * enabled/suffix/delivery_limit/queue_type por prioridade; chaves
+         * ausentes caem para o valor global acima.
+         */
+        'dead_letter' => [
+            'enabled' => env('RABBITMQ_PRIORITY_DLQ_ENABLED', true),
+            'suffix' => env('RABBITMQ_PRIORITY_DLQ_SUFFIX', '.dlq'),
+            'delivery_limit' => (int) env('RABBITMQ_PRIORITY_DELIVERY_LIMIT', 3),
+            'queue_type' => env('RABBITMQ_PRIORITY_DLQ_QUEUE_TYPE', 'quorum'),
+            'priorities' => [
+                'high' => [],
+                'default' => [],
+                'low' => [],
+            ],
+        ],
+
+        /*
+         * Namespaces REMOTOS de publicação: topologias de prioridade de outros
+         * sistemas que compartilham o mesmo broker, para publicar nas filas
+         * deles via producePriority(..., remote: '<nome>') ou rotas com
+         * 'remote'. O consumo é sempre local — quem consome/declara DLQ do
+         * namespace remoto é o sistema dono das filas. `queues` e
+         * `dead_letter` DEVEM espelhar a config do sistema remoto, senão o
+         * queue_declare do produtor diverge e gera PRECONDITION_FAILED.
+         *
+         * 'remotes' => [
+         *     'dasa' => [
+         *         'queues' => [
+         *             'high' => 'dasa_priority_high',
+         *             'default' => 'dasa_priority_default',
+         *             'low' => 'dasa_priority_low',
+         *         ],
+         *         'dead_letter' => [
+         *             'enabled' => true,
+         *             'suffix' => '.dlq',
+         *             'delivery_limit' => 3,
+         *             'queue_type' => 'quorum',
+         *         ],
+         *     ],
+         * ],
+         */
+        'remotes' => [],
+
+        /*
+         * Mapa de roteamento da aplicação: message_type => [
+         *     'priority' => 'high'|'default'|'low',
+         *     'consumer' => classe com process($message) (PriorityConsumerInterface),
+         *     'remote' => opcional; nome em priority.remotes para publicar nas
+         *                 filas de outro sistema. Rotas com 'remote' não devem
+         *                 definir 'consumer' (quem processa é o sistema remoto).
+         * ]
+         */
+        'routes' => [],
+    ],
 ];

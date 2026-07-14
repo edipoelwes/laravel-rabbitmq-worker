@@ -45,7 +45,7 @@ abstract class RabbitMQ
         $this->exclusive = $exclusive;
         $this->durable = $durable;
         $this->autoDelete = $autoDelete;
-        $this->arguments = array_merge($this->arguments, $arguments);
+        $this->arguments = $this->withQuorumInitialGroupSize(array_merge($this->arguments, $arguments));
         $this->correlation_id = Str::uuid();;
 
         $this->connection = new AMQPStreamConnection(
@@ -68,6 +68,26 @@ abstract class RabbitMQ
         );
 
         $this->channel = $this->connection->channel();
+    }
+
+    /**
+     * Injeta x-quorum-initial-group-size (config quorum.initial_group_size)
+     * nos argumentos finais quando a fila é quorum, para que ela já nasça
+     * replicada no número de nós esperado. O argumento só age na criação da
+     * fila; para filas existentes use `rabbitmq-queues grow` ou recrie-as.
+     * Não sobrescreve um valor passado explicitamente e é omitido quando a
+     * config é 0 ou o x-queue-type final não é quorum.
+     */
+    private function withQuorumInitialGroupSize(array $arguments): array
+    {
+        $queueType = $arguments['x-queue-type'][1] ?? null;
+        $groupSize = (int) config('laravel-rabbitmq-worker.quorum.initial_group_size', 3);
+
+        if ($queueType === 'quorum' && $groupSize > 0 && !isset($arguments['x-quorum-initial-group-size'])) {
+            $arguments['x-quorum-initial-group-size'] = ['I', $groupSize];
+        }
+
+        return $arguments;
     }
 
     public function queue_declare()
